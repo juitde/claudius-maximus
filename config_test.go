@@ -328,20 +328,20 @@ func TestResolveProjects(t *testing.T) {
 	makeProject(t, filepath.Join(root, "other", "tool"), ".git")
 
 	t.Run("finds projects and skips non-projects", func(t *testing.T) {
-		projects, _, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs: []string{filepath.Join(root, "dev", "*")},
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		assertPaths(t, projects,
+		assertPaths(t, scan.Projects,
 			filepath.Join(root, "dev", "api"),
 			filepath.Join(root, "dev", "web"),
 		)
 	})
 
 	t.Run("deduplicates across overlapping patterns", func(t *testing.T) {
-		projects, _, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs: []string{
 				filepath.Join(root, "dev", "*"),
 				filepath.Join(root, "*", "*"),
@@ -350,7 +350,7 @@ func TestResolveProjects(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		assertPaths(t, projects,
+		assertPaths(t, scan.Projects,
 			filepath.Join(root, "dev", "api"),
 			filepath.Join(root, "dev", "web"),
 			filepath.Join(root, "other", "tool"),
@@ -358,7 +358,7 @@ func TestResolveProjects(t *testing.T) {
 	})
 
 	t.Run("malformed pattern warns without aborting the rest", func(t *testing.T) {
-		projects, warnings, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs: []string{
 				filepath.Join(root, "dev", "["), // unterminated character class
 				filepath.Join(root, "dev", "*"),
@@ -368,41 +368,41 @@ func TestResolveProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		// The good pattern must still have been processed.
-		assertPaths(t, projects,
+		assertPaths(t, scan.Projects,
 			filepath.Join(root, "dev", "api"),
 			filepath.Join(root, "dev", "web"),
 		)
-		if !hasWarningContaining(warnings, "malformed pattern") {
-			t.Errorf("expected a malformed-pattern warning, got %v", warnings)
+		if !hasWarningContaining(scan.Warnings, "malformed pattern") {
+			t.Errorf("expected a malformed-pattern warning, got %v", scan.Warnings)
 		}
 	})
 
 	t.Run("pattern matching nothing warns", func(t *testing.T) {
-		_, warnings, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs: []string{filepath.Join(root, "nonexistent", "*")},
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !hasWarningContaining(warnings, "matched nothing") {
-			t.Errorf("expected a matched-nothing warning, got %v", warnings)
+		if !hasWarningContaining(scan.Warnings, "matched nothing") {
+			t.Errorf("expected a matched-nothing warning, got %v", scan.Warnings)
 		}
 	})
 
 	t.Run("directories without markers warn", func(t *testing.T) {
-		_, warnings, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs: []string{filepath.Join(root, "dev", "notes")},
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !hasWarningContaining(warnings, "project marker") {
-			t.Errorf("expected a missing-marker warning, got %v", warnings)
+		if !hasWarningContaining(scan.Warnings, "project marker") {
+			t.Errorf("expected a missing-marker warning, got %v", scan.Warnings)
 		}
 	})
 
 	t.Run("empty marker set accepts marker-less directories", func(t *testing.T) {
-		projects, warnings, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs:   []string{filepath.Join(root, "dev", "*")},
 			ProjectMarkers: []string{},
 		})
@@ -411,18 +411,18 @@ func TestResolveProjects(t *testing.T) {
 		}
 		// "notes" has no marker but is still a directory, so it now counts.
 		// "loose.txt" is a file and must stay excluded regardless.
-		assertPaths(t, projects,
+		assertPaths(t, scan.Projects,
 			filepath.Join(root, "dev", "api"),
 			filepath.Join(root, "dev", "web"),
 			filepath.Join(root, "dev", "notes"),
 		)
-		if len(warnings) != 0 {
-			t.Errorf("expected no warnings, got %v", warnings)
+		if len(scan.Warnings) != 0 {
+			t.Errorf("expected no warnings, got %v", scan.Warnings)
 		}
 	})
 
 	t.Run("custom marker set narrows the result", func(t *testing.T) {
-		projects, _, err := resolveProjects(&Config{
+		scan, err := resolveProjects(&Config{
 			ProjectGlobs:   []string{filepath.Join(root, "dev", "*")},
 			ProjectMarkers: []string{"go.mod"},
 		})
@@ -431,16 +431,16 @@ func TestResolveProjects(t *testing.T) {
 		}
 		// Only "api" has go.mod; "web" has package.json, which is no longer
 		// in the marker set.
-		assertPaths(t, projects, filepath.Join(root, "dev", "api"))
+		assertPaths(t, scan.Projects, filepath.Join(root, "dev", "api"))
 	})
 
 	t.Run("no globs configured yields nothing", func(t *testing.T) {
-		projects, warnings, err := resolveProjects(&Config{})
+		scan, err := resolveProjects(&Config{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(projects) != 0 || len(warnings) != 0 {
-			t.Errorf("expected empty result, got %v / %v", projects, warnings)
+		if len(scan.Projects) != 0 || len(scan.Warnings) != 0 {
+			t.Errorf("expected empty result, got %v / %v", scan.Projects, scan.Warnings)
 		}
 	})
 }

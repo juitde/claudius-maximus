@@ -182,60 +182,83 @@ func saveConfig(path string, cfg *Config) error {
 	return writeFileAtomic(path, append(data, '\n'), 0o600)
 }
 
+// RejectedDir is something a glob matched that did not become a project.
+//
+// Reporting these matters because the alternative is a project that quietly
+// fails to appear. The list is what makes "why is my project missing?"
+// answerable without guessing.
+type RejectedDir struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
+// ScanResult is everything a scan of the configured globs learned.
+type ScanResult struct {
+	Projects []Project     `json:"projects"`
+	Rejected []RejectedDir `json:"rejected,omitempty"`
+	Warnings []string      `json:"warnings,omitempty"`
+}
+
 // resolveProjects expands every configured glob and keeps the directories that
 // look like projects.
 //
-// Alongside the projects it returns human-readable warnings for patterns that
-// could not be used. A malformed pattern is not fatal — the remaining patterns
-// still resolve — but it must not be swallowed either: silently dropping a
-// typo'd glob means a project simply never appears, with nothing to explain
-// why.
-func resolveProjects(cfg *Config) (projects []Project, warnings []string, err error) {
+// Nothing is discarded in silence. Patterns that cannot be used produce
+// warnings, and directories that matched but were filtered out are reported
+// individually: a malformed pattern is not fatal, but swallowing it means a
+// project never appears with nothing to explain why.
+func resolveProjects(cfg *Config) (*ScanResult, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, nil, fmt.Errorf("determine home directory: %w", err)
+		return nil, fmt.Errorf("determine home directory: %w", err)
 	}
 
 	markers, warnings := validateMarkers(cfg.markers())
+	result := &ScanResult{Warnings: warnings}
 
 	seen := map[string]bool{}
 	for _, pattern := range cfg.ProjectGlobs {
 		expanded := expandHome(pattern, home)
 		matches, globErr := filepath.Glob(expanded)
 		if globErr != nil {
-			warnings = append(warnings, fmt.Sprintf("ignoring malformed pattern %q: %v", pattern, globErr))
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("ignoring malformed pattern %q: %v", pattern, globErr))
 			continue
 		}
 		if len(matches) == 0 {
-			warnings = append(warnings, fmt.Sprintf("pattern %q matched nothing", pattern))
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("pattern %q matched nothing", pattern))
 			continue
 		}
 
 		matchedProject := false
 		for _, match := range matches {
-			info, statErr := os.Stat(match)
-			if statErr != nil || !info.IsDir() {
-				continue
-			}
 			abs, absErr := filepath.Abs(match)
 			if absErr != nil || seen[abs] {
 				continue
 			}
-			if !looksLikeProject(abs, markers) {
-				continue
-			}
 			seen[abs] = true
-			matchedProject = true
-			projects = append(projects, Project{Path: abs})
+
+			info, statErr := os.Stat(match)
+			switch {
+			case statErr != nil:
+				result.Rejected = append(result.Rejected, RejectedDir{abs, "not readable: " + statErr.Error()})
+			case !info.IsDir():
+				result.Rejected = append(result.Rejected, RejectedDir{abs, "not a directory"})
+			case !looksLikeProject(abs, markers):
+				result.Rejected = append(result.Rejected, RejectedDir{abs, "no project marker"})
+			default:
+				matchedProject = true
+				result.Projects = append(result.Projects, Project{Path: abs})
+			}
 		}
 		if !matchedProject {
-			warnings = append(warnings, fmt.Sprintf(
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
 				"pattern %q matched directories, but none contained a project marker (%s) — "+
 					"set project_markers to [] in the config to accept every matched directory",
 				pattern, strings.Join(markers, ", ")))
 		}
 	}
-	return projects, warnings, nil
+	return result, nil
 }
 
 // looksLikeProject reports whether dir carries at least one of the given

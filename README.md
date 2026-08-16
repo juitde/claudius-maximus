@@ -36,7 +36,36 @@ Then scan them:
 ```bash
 claudius-maximus rescan           # discover projects, assign names
 claudius-maximus list-projects    # print the cached list
+claudius-maximus doctor           # check the setup, preview the next rescan
 ```
+
+### Checking the setup
+
+`doctor` reports on the configuration and previews what a `rescan` would do —
+without writing anything:
+
+```
+  ✓ project globs      1 pattern configured: ~/dev/*
+  ✓ project markers    built-in defaults (49 entries)
+  ✓ project cache      29 projects, scanned 5 minutes ago
+  ! cache freshness    out of date — 2 to add, 1 to rename
+
+Preflight scan (nothing written)
+
+  30 projects would be cached
+
+  would be added:
+    infra    ~/dev/infra
+
+  matched a glob but skipped:
+    ~/dev/notes      no project marker
+    ~/dev/.DS_Store  not a directory
+```
+
+The last section is the one to read when a project is missing: it lists every
+directory a glob matched that did not qualify, and why. `--json` prints the
+same report for scripting. Only a hard failure exits non-zero — warnings
+describe things you may well have chosen on purpose.
 
 `rescan` keeps every project name as short as it can while staying unique —
 `api` stays `api` unless a second `api` shows up, at which point both grow a

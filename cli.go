@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 )
@@ -32,6 +33,8 @@ func runCLI(svc *Service, args []string) int {
 		return cliRescan(svc)
 	case "config":
 		return cliConfig(svc, args[1:])
+	case "doctor":
+		return cliDoctor(svc, args[1:])
 	case "help", "-h", "--help":
 		printUsage()
 		return exitOK
@@ -46,6 +49,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `%s %s
 
 Usage:
+  %[3]s doctor [--json]      Report on the setup and preview what a rescan would do
   %[3]s config <subcommand>  Inspect or edit the configuration ('config' for details)
   %[3]s rescan               Scan the configured globs and refresh the project cache
   %[3]s list-projects        Print the cached project list
@@ -78,6 +82,30 @@ func cliRescan(svc *Service) int {
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 	return printJSON(result)
+}
+
+func cliDoctor(svc *Service, args []string) int {
+	fs := newFlagSet("doctor")
+	asJSON := fs.Bool("json", false, "print the report as JSON instead of text")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	report := svc.Doctor()
+	if *asJSON {
+		if code := printJSON(report); code != exitOK {
+			return code
+		}
+	} else {
+		printDoctorHuman(report)
+	}
+
+	// Only a hard failure is worth a non-zero exit. Warnings describe things
+	// the user may well have chosen on purpose.
+	if report.failed() {
+		return exitError
+	}
+	return exitOK
 }
 
 func cliConfig(svc *Service, args []string) int {
@@ -152,6 +180,12 @@ func printConfigSchema(specs []PropertySpec) int {
 }
 
 // --- helpers ---
+
+func newFlagSet(name string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	return fs
+}
 
 func fail(err error) int {
 	fmt.Fprintln(os.Stderr, "error:", err)
