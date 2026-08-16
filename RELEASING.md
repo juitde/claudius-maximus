@@ -115,7 +115,31 @@ picks a reasonable default, not a final answer.
 - Release branches (`release/vX.Y`) are created by a human, only when a
   backport actually becomes necessary — never proactively, and never by CI.
 
-## Repository setting this process depends on
+## Retracting a release
+
+Version numbers are never reused, and version tags are never moved or
+deleted — a repository ruleset enforces this at the git level, for everyone,
+with no bypass. If a shipped release turns out to be bad enough to pull back:
+
+- **Do not delete the tag or the release.** Someone may already have it
+  pinned (`go install ...@vX.Y.Z`, a Dockerfile, a lockfile); deleting the tag
+  out from under them turns a bad release into a broken build with no
+  explanation.
+- **Edit the release notes** to say plainly that it's retracted and why, and
+  point at the version that fixes it. Marking it a GitHub "pre-release" is
+  reasonable extra signal (keeps it off the default "Latest" label) but is not
+  a substitute for saying so in the notes themselves.
+- **Ship the fix as the next version** — a normal release or backport,
+  whichever applies. There is no such thing as re-releasing `vX.Y.Z`; the
+  number is burned the moment the tag exists, good or bad.
+
+## Repository settings this process depends on
+
+Merges to `main` and to any `release/vX.Y` branch must go through a pull
+request — a repository ruleset blocks direct pushes, force-pushes, and branch
+deletion on both, enforced for everyone including admins. (This is why the
+repository is public: GitHub does not offer rulesets or classic branch
+protection for private repositories on the free plan.)
 
 Merges to `main` must use **"Create a merge commit"** — squash and rebase
 merging are disabled for this repository. Squashing a PR into one commit would
