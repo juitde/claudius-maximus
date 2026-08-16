@@ -34,6 +34,7 @@ func environmentFixture(t *testing.T, environmentID string) (svc *Service, proje
 	t.Setenv(envClaudeBin, claudeStub(t))
 
 	svc, _ = newTestService(t, Config{ProjectGlobs: []string{filepath.Join(root, "*")}})
+	svc.selfBinary = builtSelf(t)
 	if _, err := svc.Rescan(); err != nil {
 		t.Fatalf("rescan: %v", err)
 	}

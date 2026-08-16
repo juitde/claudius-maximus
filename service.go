@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"time"
 )
@@ -19,15 +20,24 @@ type Service struct {
 	configPath string
 	cachePath  string
 	claudeBin  string
+	// selfBinary is this executable's own path, used to spawn the
+	// delayed-kill helper (see delayedKillArg). Resolved once at
+	// construction and overridden directly in tests, the same way claudeBin
+	// is — os.Executable() would otherwise resolve to the test binary itself
+	// when exercised from a test, which is not this program and does not
+	// understand its subcommands.
+	selfBinary string
 	registry   *Registry
 }
 
 func newService(stateDir string) *Service {
+	self, _ := os.Executable() // best-effort; see stopEnvironment for the failure path
 	return &Service{
 		stateDir:   stateDir,
 		configPath: configFile(stateDir),
 		cachePath:  stateFile(stateDir, "projects.json"),
 		claudeBin:  resolveClaudeBin(),
+		selfBinary: self,
 		registry:   newRegistry(stateDir),
 	}
 }

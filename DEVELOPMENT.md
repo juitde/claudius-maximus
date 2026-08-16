@@ -225,14 +225,38 @@ serve is exactly the case that does not need it.
 
 Kept minimal instead: no `Multiplexer` field, no dispatch, one spawn path.
 
+## Stopping an environment from inside itself
+
+`stop_environment` never needed a way to resolve "myself" — a session already
+knows its own directory and simply passes it, the same as stopping anything
+else. The original design's self-identification (an env var, a PID fallback)
+solved a question that does not arise here and was left out.
+
+Something else does arise, though. If this server is registered at user scope,
+a session running inside an environment can reach the same MCP server and ask
+it to stop that very environment. The `claudius-maximus mcp` process handling
+that call was spawned as a child of the environment's own `claude` process, and
+inherits its process group — the same group `terminateProcess` signals as a
+whole (see "One implementation, two front ends" — every stop goes through the
+one code path, CLI or MCP, self-directed or not). Killing that group in-line
+would signal the MCP server process too, with no guarantee its JSON-RPC
+response reaches the client before it dies.
+
+The fix is the delayed-kill helper the original design already had, minus the
+self-identification half it no longer needs: `stopEnvironment` spawns a
+detached copy of this binary with a hidden `__delayed-kill <pid> <delay>`
+subcommand, which sleeps briefly and only then sends the signal. The response
+gets a head start before anything dies. It applies to every stop, not only a
+self-directed one, because there is no cheap, reliable way to tell in advance
+whether this call happens to be one — and delaying a kill that did not need
+delaying costs nothing anyone would notice.
+
 ## Deferred, and why
 
 - **Cross-process file locking.** The mutex guards one process. Two processes
   writing the same state file concurrently are not protected. The window is
   small, the writes are rare, and the atomic replace means a loser overwrites
   rather than corrupts.
-- **Self-termination from inside an environment.** Not needed for the case this
-  was built for: stopping happens from outside.
 - **`self-update`.** Needs published release artifacts to exist first. Its
   migration half, however, constrains decisions now — which is why the state
   files are versioned already.

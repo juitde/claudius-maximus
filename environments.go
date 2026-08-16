@@ -13,9 +13,15 @@ func isEnvironmentAlive(env Environment) bool {
 	return processAlive(env.PID)
 }
 
-// stopEnvironment ends an environment's process.
-func stopEnvironment(env Environment) error {
-	return terminateProcess(env.PID)
+// stopEnvironment schedules an environment's process to end shortly.
+//
+// Not an in-line terminateProcess call: see delayedKillArg for why the actual
+// kill has to happen in a separate process.
+func stopEnvironment(selfBinary string, env Environment) error {
+	if selfBinary == "" {
+		return fmt.Errorf("could not determine own executable path")
+	}
+	return spawnDelayedKill(selfBinary, env.PID, defaultKillDelay)
 }
 
 // ProjectTarget names a project, by cached name or by path.
@@ -203,7 +209,7 @@ func (s *Service) StopEnvironment(target ProjectTarget) (*StopResult, error) {
 			shortenPath(projectPath))
 	}
 
-	if err := stopEnvironment(*env); err != nil {
+	if err := stopEnvironment(s.selfBinary, *env); err != nil {
 		return nil, fmt.Errorf("stop environment: %w", err)
 	}
 	if _, err := s.registry.Remove(projectPath); err != nil {

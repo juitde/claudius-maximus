@@ -5,6 +5,12 @@ import (
 )
 
 func main() {
+	// Intercepted before any normal dispatch, CLI or MCP: this subcommand is
+	// not user-facing, and handleDelayedKill always exits on its own.
+	if len(os.Args) > 1 && os.Args[1] == delayedKillArg {
+		handleDelayedKill(os.Args[2:])
+		return // unreachable
+	}
 	os.Exit(run(os.Args[1:]))
 }
 
