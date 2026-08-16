@@ -129,10 +129,17 @@ picks a reasonable default, not a final answer.
   matching draft (rendering it fresh instead, in the rare case no draft ever
   got created — a milestone closed with zero PRs ever merged to it), prepends
   the milestone's own description to the published notes if one was written,
-  and opens the merge-up PR when releasing from a release branch.
-- `release.yml` runs when a release is published (by either of the above, or
-  by hand) and attaches the build artifacts via GoReleaser. It does not decide
-  what gets released — only builds what already has a release object.
+  explicitly triggers `release.yml` for the new tag, and opens the merge-up
+  PR when releasing from a release branch.
+- `release.yml` builds artifacts via GoReleaser and attaches them to whatever
+  release already exists for the tag it runs against. Triggered explicitly by
+  `milestone-release.yml` (`gh workflow run release.yml --ref <tag>`) rather
+  than by its own `release: published` event, which does not reliably fire
+  when the same automation published the release — see DEVELOPMENT.md. That
+  trigger stays as a fallback for a release published by hand through the web
+  UI. It does not decide what gets released, and can be re-run by hand
+  (`gh workflow run release.yml --ref <tag>`) against any existing release if
+  artifacts are ever missing.
 - `milestone-version-check.yml` runs daily and on PR label/milestone changes.
   It compares the version bump the milestone targeting `main` is titled for
   against what its attached PRs' labels actually require
