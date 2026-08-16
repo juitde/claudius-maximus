@@ -330,3 +330,74 @@ func TestPlural(t *testing.T) {
 		}
 	}
 }
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want string // "<", ">" or "="
+	}{
+		{"2.1.51", "2.1.51", "="},
+		{"2.1.50", "2.1.51", "<"},
+		{"2.1.233", "2.1.51", ">"}, // not a string comparison: 233 > 51
+		{"1.9.99", "2.0.0", "<"},
+		{"3.0.0", "2.9.9", ">"},
+		{"2.1", "2.1.0", "<"}, // fewer components sort first
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.a+" vs "+tt.b, func(t *testing.T) {
+			got := compareVersions(tt.a, tt.b)
+			sign := "="
+			if got < 0 {
+				sign = "<"
+			} else if got > 0 {
+				sign = ">"
+			}
+			if sign != tt.want {
+				t.Errorf("compareVersions(%q, %q) = %d (%s), want %s", tt.a, tt.b, got, sign, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckAuthBlockers(t *testing.T) {
+	t.Run("nothing set", func(t *testing.T) {
+		for _, name := range authBlockers {
+			t.Setenv(name, "")
+		}
+		if got := checkAuthBlockers(); got.Status != StatusOK {
+			t.Errorf("status = %v, want ok", got.Status)
+		}
+	})
+
+	t.Run("a blocker warns rather than fails", func(t *testing.T) {
+		// A warning, not a failure: the claim is documented rather than
+		// verified here, and refusing to run on it would be worse than saying
+		// so and letting the attempt speak for itself.
+		for _, name := range authBlockers {
+			t.Setenv(name, "")
+		}
+		t.Setenv(authBlockers[0], "token-value")
+
+		got := checkAuthBlockers()
+		if got.Status != StatusWarn {
+			t.Errorf("status = %v, want warn", got.Status)
+		}
+		if !strings.Contains(got.Detail, authBlockers[0]) {
+			t.Errorf("detail should name the variable: %q", got.Detail)
+		}
+	})
+}
+
+func TestCheckClaudeBinaryMissing(t *testing.T) {
+	svc := newService(t.TempDir())
+	svc.claudeBin = filepath.Join(t.TempDir(), "definitely-not-here")
+
+	got := svc.checkClaudeBinary()
+	if got.Status != StatusFail {
+		t.Errorf("status = %v, want fail — nothing works without it", got.Status)
+	}
+	if got.FixHint == "" {
+		t.Error("a failure should say what to do about it")
+	}
+}

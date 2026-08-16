@@ -11,3 +11,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Editor/agent tooling metadata that does not belong in the repo
+.serena/

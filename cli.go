@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -39,6 +40,12 @@ func runCLI(svc *Service, args []string) int {
 		return cliStop(svc, args[1:])
 	case "list":
 		return cliList(svc, args[1:])
+	case mcpCommand:
+		return cliServeMCP(svc, args[1:])
+	case "install":
+		return cliInstall(svc, args[1:])
+	case "uninstall":
+		return cliUninstall(svc, args[1:])
 	case "config":
 		return cliConfig(svc, args[1:])
 	case "doctor":
@@ -60,6 +67,10 @@ Usage:
   %[3]s start --project <name>   Start a remote-control environment for a project
   %[3]s stop  --project <name>   Stop it again
   %[3]s list                     Show the environments now running
+
+  %[3]s install              Register as an MCP server with Claude Code
+  %[3]s uninstall            Remove that registration
+  %[3]s mcp                  Run the MCP server over stdio (what install registers)
 
   %[3]s doctor [--json]      Report on the setup and preview what a rescan would do
   %[3]s config <subcommand>  Inspect or edit the configuration ('config' for details)
@@ -205,6 +216,19 @@ func cliList(svc *Service, args []string) int {
 
 	fmt.Printf("%s running\n\n", plural(len(environments), "environment"))
 	printEnvironments(environments, mode)
+	return exitOK
+}
+
+// cliServeMCP runs the protocol server. Nothing on this path may write to
+// stdout: that is the transport, and a stray line of human output corrupts it.
+func cliServeMCP(svc *Service, args []string) int {
+	if len(args) > 0 {
+		fmt.Fprintf(os.Stderr, "error: %s takes no arguments\n", mcpCommand)
+		return exitUsage
+	}
+	if err := serveMCP(context.Background(), svc); err != nil {
+		return fail(err)
+	}
 	return exitOK
 }
 

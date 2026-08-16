@@ -241,7 +241,36 @@ filtering curates the project list; it does not decide where claude may run.
 `--spawn same-dir|worktree` overrides `spawn_mode` for a single start. See
 `config schema` for what the two mean, and why `same-dir` is the default.
 
-MCP tools land as the build progresses.
+## As an MCP server
+
+```bash
+claudius-maximus install      # registers with Claude Code
+claudius-maximus doctor       # confirms the registration
+```
+
+From an orchestrator session, five tools are then available:
+
+| Tool | Purpose |
+|---|---|
+| `list_projects` | what can be started |
+| `rescan_projects` | refresh that list |
+| `start_environment` | start one, returns the URL to open |
+| `list_environments` | what is running, with URLs |
+| `stop_environment` | stop one |
+
+`install` registers `claudius-maximus mcp`, which is the protocol server.
+Running the binary bare prints usage instead — being explicit means a human who
+types the command name gets help rather than a process silently waiting on
+stdin, and a host configured without the subcommand fails immediately rather
+than mixing usage text into the protocol stream.
+
+`uninstall` removes the registration, and refuses while environments are
+running unless given `--force`: unregistering leaves them running but no longer
+reachable, which should not happen silently.
+
+Deliberately not exposed as MCP tools: `install` and `uninstall`. Registering
+this server from inside itself would require it to already be registered and
+running.
 
 ## State directory
 

@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -53,6 +56,10 @@ func (s *Service) Doctor() *DoctorReport {
 	report := &DoctorReport{Version: version, StateDir: s.stateDir}
 
 	report.Checks = append(report.Checks,
+		s.checkClaudeBinary(),
+		s.checkClaudeVersion(),
+		checkAuthBlockers(),
+		s.checkMCPRegistration(),
 		s.checkStateDir(),
 		s.checkConfig(),
 	)
@@ -83,6 +90,120 @@ func (s *Service) Doctor() *DoctorReport {
 	report.Preflight = preflight
 	report.Checks = append(report.Checks, checkFreshness(preflight))
 	return report
+}
+
+// minClaudeVersion is the minimum Anthropic documents for Remote Control.
+//
+// Taken from the documentation rather than established here: the behaviour was
+// verified against 2.1.233, and no older build was tried. Falling short is
+// therefore a warning, not a failure — refusing to run on a number nobody
+// checked would be worse than letting it fail informatively.
+const minClaudeVersion = "2.1.51"
+
+var versionPattern = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
+
+func (s *Service) checkClaudeBinary() CheckResult {
+	path, err := exec.LookPath(s.claudeBin)
+	if err != nil {
+		return CheckResult{
+			Name: "claude binary", Status: StatusFail,
+			Detail:  fmt.Sprintf("%q not found in PATH", s.claudeBin),
+			FixHint: "install Claude Code, or point " + envClaudeBin + " at it",
+		}
+	}
+	return CheckResult{Name: "claude binary", Status: StatusOK, Detail: shortenPath(path)}
+}
+
+func (s *Service) checkClaudeVersion() CheckResult {
+	out, err := exec.Command(s.claudeBin, "--version").Output()
+	if err != nil {
+		return CheckResult{
+			Name: "claude version", Status: StatusFail,
+			Detail: "could not run claude --version: " + err.Error(),
+		}
+	}
+
+	found := versionPattern.FindString(string(out))
+	if found == "" {
+		return CheckResult{
+			Name: "claude version", Status: StatusWarn,
+			Detail: "unrecognised output: " + strings.TrimSpace(string(out)),
+		}
+	}
+	if compareVersions(found, minClaudeVersion) < 0 {
+		return CheckResult{
+			Name: "claude version", Status: StatusWarn,
+			Detail:  fmt.Sprintf("%s, below the documented minimum %s for Remote Control", found, minClaudeVersion),
+			FixHint: "claude update",
+		}
+	}
+	return CheckResult{Name: "claude version", Status: StatusOK, Detail: found}
+}
+
+// authBlockers are environment variables that reportedly rule out Remote
+// Control, which needs a full claude.ai login rather than a token.
+//
+// Reported as warnings because the claim comes from documentation and has not
+// been confirmed here — and because whether authentication actually works can
+// only be settled by starting a session, which is what the next thing you do
+// will tell you anyway.
+var authBlockers = []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
+
+func checkAuthBlockers() CheckResult {
+	var present []string
+	for _, name := range authBlockers {
+		if os.Getenv(name) != "" {
+			present = append(present, name)
+		}
+	}
+	if len(present) == 0 {
+		return CheckResult{
+			Name: "authentication", Status: StatusOK,
+			Detail: "no known blockers set",
+		}
+	}
+	return CheckResult{
+		Name: "authentication", Status: StatusWarn,
+		Detail: strings.Join(present, " and ") +
+			" set; Remote Control is documented to need a full claude.ai login rather than a token",
+		FixHint: "unset it, then run: claude auth login",
+	}
+}
+
+func (s *Service) checkMCPRegistration() CheckResult {
+	out, err := exec.Command(s.claudeBin, "mcp", "list").Output()
+	if err != nil {
+		return CheckResult{
+			Name: "mcp registration", Status: StatusWarn,
+			Detail: "could not run claude mcp list: " + err.Error(),
+		}
+	}
+	if !strings.Contains(string(out), appName) {
+		return CheckResult{
+			Name: "mcp registration", Status: StatusWarn,
+			Detail:  "not registered, so it cannot be used from a Claude Code session",
+			FixHint: appName + " install",
+		}
+	}
+	return CheckResult{
+		Name: "mcp registration", Status: StatusOK,
+		Detail: "registered as " + appName,
+	}
+}
+
+// compareVersions orders two dotted numeric versions, returning a negative
+// number when a precedes b. Deliberately simple: it handles the x.y.z shapes
+// claude reports and nothing else.
+func compareVersions(a, b string) int {
+	partsA, partsB := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(partsA) && i < len(partsB); i++ {
+		numA, _ := strconv.Atoi(partsA[i])
+		numB, _ := strconv.Atoi(partsB[i])
+		if numA != numB {
+			return numA - numB
+		}
+	}
+	return len(partsA) - len(partsB)
 }
 
 func (s *Service) checkStateDir() CheckResult {
