@@ -4,6 +4,13 @@ Starts, stops and lists Claude Code remote-control environments — so a new
 session can be started on a project from a phone, without having been at the
 machine first.
 
+AI is used here as a development tool in support of the people building this
+project, not as an unsupervised author. Every change is reviewed and owned by
+a human before it ships, and anything this project publishes (release notes,
+docs, commit messages) is expected to read as human-curated rather than as AI
+output. Concretely: no em-dashes in prose meant for outside readers (release
+notes, README, announcements). Use periods, commas or colons instead.
+
 - **[DEVELOPMENT.md](../DEVELOPMENT.md)** — the model this is built on, what
   running `claude remote-control` for real revealed, and what was deferred and
   why. Read this before proposing a structural change.
