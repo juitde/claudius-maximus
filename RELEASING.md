@@ -13,24 +13,25 @@ release, major or minor depending on what's actually merged since the last
 one shipped. Patch/bugfix milestones for older, already-superseded lines are
 the exception: several of those can be open in parallel, one per affected
 `release/vX.Y` branch, entirely independent of each other and of whatever is
-queued for `main`. `milestone-release.yml` enforces the `main` rule: it
-refuses to publish if the current draft contains a PR milestoned for a
-different release than the one being closed, rather than silently shipping
-someone else's not-yet-ready work under the wrong version.
+queued for `main`. This is a recommended convention, not something that has
+to be enforced by refusing anything: each milestone's draft is built only
+from the PRs actually attached to it (see "What the automation does and does
+not do" below), so a PR can never end up published under the wrong
+milestone's version even if this convention were ever not followed.
 
 ## The short version
 
 1. Plan a release as a GitHub **milestone** named exactly `vMAJOR.MINOR.PATCH`
    (no `v` missing, no suffix). Attach the PRs meant for it.
-2. Merge those PRs to `main` as usual. [Release
-   Drafter](https://github.com/release-drafter/release-drafter) keeps one
-   draft release up to date automatically as they land — open the repo's
-   Releases page any time to see it grow.
+2. Merge those PRs to `main` as usual. `milestone-draft.yml` keeps this
+   milestone's own draft release up to date automatically as they land —
+   open the repo's Releases page any time to see it grow.
 3. When ready to ship: if you want a release-specific intro, write it into
    the **milestone's own description** (edit the milestone, not the draft
    release). It can be rewritten as many times as you like, whenever you
    like; unlike editing the draft directly, nothing here overwrites it, since
-   Release Drafter never touches milestones.
+   `milestone-draft.yml` only ever touches the drafted PR list, never the
+   milestone.
 4. Close the milestone. This publishes the release and triggers the build.
    Watch the Actions tab; artifacts appear on the release once it finishes.
    Whatever is in the milestone's description at the moment it closes gets
@@ -112,25 +113,35 @@ picks a reasonable default, not a final answer.
 
 ## What the automation does and does not do
 
-- `release-drafter.yml` runs on every push to `main` and every PR event,
-  keeping one draft current. It never publishes anything on its own.
+- `milestone-draft.yml` runs on every push to `main` or to any `release/vX.Y`
+  branch, and daily. It finds the one open milestone targeting that branch,
+  renders a categorized changelog from exactly the PRs actually attached to
+  that milestone (`render_milestone_notes.py`), and keeps a draft release
+  current under that milestone's own title as its tag — from the very first
+  PR, main or backport alike. It never publishes anything on its own. Every
+  run also deletes any draft whose title no longer matches an open
+  milestone, so there is never more than one draft for the next
+  main-targeted release and never more than one per already-published
+  line's next patch — a milestone deleted or renamed after its draft was
+  created cannot leave a stray one behind.
 - `milestone-release.yml` runs when a milestone closes. It validates the
-  title, decides `main` vs. an existing `release/vX.Y` branch, promotes the
-  matching draft (or creates the release directly if none exists — the normal
-  case for a backport, which Release Drafter does not track), prepends the
-  milestone's own description to the published notes if one was written, and
-  opens the merge-up PR when releasing from a release branch.
+  title, decides `main` vs. an existing `release/vX.Y` branch, publishes the
+  matching draft (rendering it fresh instead, in the rare case no draft ever
+  got created — a milestone closed with zero PRs ever merged to it), prepends
+  the milestone's own description to the published notes if one was written,
+  and opens the merge-up PR when releasing from a release branch.
 - `release.yml` runs when a release is published (by either of the above, or
   by hand) and attaches the build artifacts via GoReleaser. It does not decide
   what gets released — only builds what already has a release object.
 - `milestone-version-check.yml` runs daily and on PR label/milestone changes.
   It compares the version bump the milestone targeting `main` is titled for
-  against what its attached PRs' labels actually require (mirroring
-  release-drafter.yml's category mapping) and fails loudly on a mismatch in
-  either direction — titled too low for a breaking-labeled PR that landed in
-  it, or still titled for a major release after that label was removed or
-  reassigned. It never retitles the milestone; a human decides the actual
-  number, same as everywhere else in this process.
+  against what its attached PRs' labels actually require
+  (`release_categories.py`, the same mapping `milestone-draft.yml` renders
+  from) and fails loudly on a mismatch in either direction — titled too low
+  for a breaking-labeled PR that landed in it, or still titled for a major
+  release after that label was removed or reassigned. It never retitles the
+  milestone; a human decides the actual number, same as everywhere else in
+  this process.
 - **Nothing here ever creates, renames, or switches which branch is the
   repository's default.** `main` is permanent. This is a deliberate difference
   from tools like `laminas/automatic-releases`, which rotate the default

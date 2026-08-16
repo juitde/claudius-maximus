@@ -63,8 +63,12 @@ jobs:
         run: |
           title="${{ steps.milestone.outputs.title }}"
           base=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo '')
-          labels_json=$(gh pr list --milestone "$title" --state all --json labels \
-            --jq '[.[].labels | map(.name)]')
+          # `gh pr list` has no --milestone flag (it exists on `gh issue
+          # list`, not this one) - filtering has to go through --search's
+          # own milestone: qualifier instead. Verified against the real repo
+          # before relying on it.
+          labels_json=$(gh pr list --search "milestone:\"$title\"" --state all \
+            --json labels --jq '[.[].labels | map(.name)]')
           if ! message=$(echo "$labels_json" | python3 .github/scripts/check_milestone_version.py "$base" "$title"); then
             echo "::error::$message"
             exit 1

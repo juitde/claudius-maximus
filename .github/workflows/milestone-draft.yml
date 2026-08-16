@@ -1,0 +1,128 @@
+name: Milestone Draft
+
+# Maintains one draft GitHub Release per open milestone, updated every time a
+# PR merges into the branch that milestone targets - main, or an existing
+# release/vX.Y branch for a backport. Replaces release-drafter entirely.
+#
+# release-drafter had no concept of milestones: its single running draft was
+# just "everything merged since the last published tag," which meant this
+# project had to build a separate daily consistency check
+# (milestone-version-check.yml) and a pre-publish safeguard against a PR
+# from the wrong milestone sneaking into a release, on top of two
+# schema-incompatible major versions and a hard requirement for a
+# previously *published* release before it could compute anything at all -
+# a requirement this project's actual first release tripped over directly
+# (see DEVELOPMENT.md). Rendering straight from a milestone's own attached
+# PRs (render_milestone_notes.py) has none of that: it works identically
+# whether or not any release has ever been published, and a PR can never
+# end up drafted under the wrong milestone, because nothing here ever looks
+# past what is actually attached to the one milestone being computed - so
+# the parallel-milestone safeguard that used to live in milestone-release.yml
+# is gone too, not just moved.
+#
+# The draft's tag is the milestone's title from the moment it is first
+# created - never a guess to rename later the way release-drafter's
+# $RESOLVED_VERSION was. Every run also deletes any draft whose title no
+# longer matches an open milestone, so at most one draft ever exists for the
+# next main-targeted release and at most one per already-published line's
+# next patch - never a stray left behind by a deleted or renamed milestone.
+on:
+  push:
+    branches: [main, "release/**"]
+  schedule:
+    # Cleanup alone, on days nothing pushes to trigger it otherwise - a
+    # milestone deleted or renamed without any further push would leave its
+    # draft stray indefinitely. See the "Find the open milestone" step's
+    # `if:`; the draft-update steps only make sense for an actual push.
+    - cron: "43 6 * * *"
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete any draft with no open milestone of the same title
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # This project writes and owns every draft itself now, under
+          # exactly one open milestone's title each - there is no longer a
+          # third-party tool's own bookkeeping to defer to. A draft can only
+          # go stray if the milestone it was created for gets deleted or
+          # renamed afterward; clean those up here so the Releases page
+          # never shows a leftover nobody meant to keep, rather than only
+          # ever adding drafts and never removing one.
+          open_titles=$(gh api repos/${{ github.repository }}/milestones --jq '.[].title')
+          draft_tags=$(gh release list --json isDraft,tagName --jq 'map(select(.isDraft)) | .[].tagName')
+          for tag in $draft_tags; do
+            if ! printf '%s\n' "$open_titles" | grep -qxF "$tag"; then
+              echo "Deleting stray draft $tag (no open milestone titled $tag)"
+              gh release delete "$tag" --yes
+            fi
+          done
+
+      - name: Find the open milestone targeting this branch
+        id: milestone
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="${{ github.ref_name }}"
+          candidates=""
+          for title in $(gh api repos/${{ github.repository }}/milestones --jq '.[].title'); do
+            if [[ "$title" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              line="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+              has_branch=false
+              if git ls-remote --exit-code --heads origin "release/v$line" >/dev/null 2>&1; then
+                has_branch=true
+              fi
+              if [ "$branch" = "main" ]; then
+                # main's milestone is whichever one has no release branch of
+                # its own (yet) - see RELEASING.md: only one such milestone
+                # is ever open at a time.
+                if [ "$has_branch" = "false" ]; then
+                  candidates="$candidates $title"
+                fi
+              elif [ "$branch" = "release/v$line" ]; then
+                candidates="$candidates $title"
+              fi
+            fi
+          done
+          count=$(echo "$candidates" | wc -w)
+          if [ "$count" -ne 1 ]; then
+            echo "Found $count milestone(s) targeting $branch ($candidates); need exactly one to draft against, skipping."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "title=$(echo "$candidates" | xargs)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update the draft for this milestone
+        if: steps.milestone.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="${{ steps.milestone.outputs.title }}"
+          branch="${{ github.ref_name }}"
+
+          prs=$(gh pr list --search "milestone:\"$title\" is:merged" \
+            --json number,title,labels --jq '[.[] | {number, title, labels: [.labels[].name]}]')
+          notes=$(echo "$prs" | python3 .github/scripts/render_milestone_notes.py)
+          notes_file=$(mktemp)
+          printf '%s\n' "$notes" > "$notes_file"
+
+          if gh release view "$title" --json isDraft --jq '.isDraft' 2>/dev/null | grep -q true; then
+            gh release edit "$title" --notes-file "$notes_file" --target "$branch"
+          elif gh release view "$title" >/dev/null 2>&1; then
+            echo "::error::$title already exists and is already published; refusing to touch a published release's notes here."
+            exit 1
+          else
+            gh release create "$title" --target "$branch" --title "$title" --draft --notes-file "$notes_file"
+          fi
