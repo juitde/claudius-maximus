@@ -8,24 +8,12 @@ import (
 	"time"
 )
 
-// Multiplexer is where a remote-control process runs.
-//
-// The spawning strategies live with the multiplexer code; this type is here
-// because it is part of the persisted record — what a stored environment needs
-// is the knowledge of how to check on it and how to shut it down.
-type Multiplexer string
-
-const (
-	MuxNone   Multiplexer = "none"
-	MuxTmux   Multiplexer = "tmux"
-	MuxScreen Multiplexer = "screen"
-)
-
 // SpawnMode is the --spawn value a remote-control process was started with.
 //
 // It has to be passed explicitly. Asked on a terminal and left unanswered,
-// claude blocks on an interactive prompt, which means anything started inside
-// tmux or screen would hang forever.
+// claude blocks on an interactive prompt — including inside a tmux or screen
+// pane the caller happens to be running this from, where nothing would ever
+// answer it.
 type SpawnMode string
 
 const (
@@ -67,12 +55,10 @@ type Environment struct {
 	EnvironmentID string `json:"environment_id"`
 	URL           string `json:"url"`
 
-	PID         int         `json:"pid"`
-	StartedAt   time.Time   `json:"started_at"`
-	LogFile     string      `json:"log_file"`
-	Multiplexer Multiplexer `json:"multiplexer"`
-	MuxName     string      `json:"mux_name,omitempty"`
-	SpawnMode   SpawnMode   `json:"spawn_mode,omitempty"`
+	PID       int       `json:"pid"`
+	StartedAt time.Time `json:"started_at"`
+	LogFile   string    `json:"log_file"`
+	SpawnMode SpawnMode `json:"spawn_mode,omitempty"`
 }
 
 // RenameEvent records a project name that changed under a running environment.
@@ -129,21 +115,7 @@ func (r *Registry) load() ([]Environment, error) {
 		return nil, err
 	}
 
-	normalize(file.Environments)
 	return file.Environments, nil
-}
-
-// normalize fills in fields that a hand-edited or older file may leave empty,
-// before any other code sees the records.
-//
-// Idempotent, so no version marker is needed: running it twice changes
-// nothing, and a version field would be complexity without a payoff.
-func normalize(environments []Environment) {
-	for i := range environments {
-		if environments[i].Multiplexer == "" {
-			environments[i].Multiplexer = MuxNone
-		}
-	}
 }
 
 func (r *Registry) save(environments []Environment) error {
@@ -228,8 +200,7 @@ func (r *Registry) List() ([]Environment, error) {
 // ListAlive returns the environments that isAlive accepts, and drops the rest
 // from the file as a side effect.
 //
-// The liveness check is injected rather than called directly: what "alive"
-// means depends on the multiplexer, and taking it as a parameter is also what
+// The liveness check is injected rather than called directly, which is what
 // makes this testable without spawning real processes.
 func (r *Registry) ListAlive(isAlive func(Environment) bool) ([]Environment, error) {
 	r.mu.Lock()

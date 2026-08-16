@@ -8,9 +8,7 @@ const (
 	// itself under as an MCP server.
 	appName = "claudius-maximus"
 
-	// shortName is the convenience alias installed alongside appName. It is
-	// also the prefix for tmux/screen session names, where a short prefix
-	// keeps `tmux ls` output readable.
+	// shortName is the convenience alias installed alongside appName.
 	shortName = "cmax"
 )
 

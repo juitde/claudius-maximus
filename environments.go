@@ -9,10 +9,6 @@ import (
 )
 
 // isEnvironmentAlive reports whether an environment's process is still there.
-//
-// Only the plain path exists so far. When the multiplexers arrive this becomes
-// a dispatch, because tmux and screen can answer the question about a whole
-// session, which is more reliable than one PID out of a pipeline.
 func isEnvironmentAlive(env Environment) bool {
 	return processAlive(env.PID)
 }
@@ -152,7 +148,6 @@ func (s *Service) StartEnvironment(args StartArgs) (*StartResult, error) {
 		PID:           outcome.PID,
 		StartedAt:     time.Now(),
 		LogFile:       logPath,
-		Multiplexer:   MuxNone,
 		SpawnMode:     spawnMode,
 	}
 	if err := s.registry.Put(env); err != nil {

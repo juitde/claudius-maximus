@@ -11,8 +11,9 @@ orchestrator session (or a shell) can spawn, track and tear down remote-control
 sessions for any project on the machine.
 
 > **Status:** working, unreleased. Environments can be started, listed and
-> stopped from the command line and over MCP. Attaching from a local terminal
-> (tmux/screen) and published binaries are not there yet.
+> stopped from the command line and over MCP. Published binaries are not there
+> yet. Attaching from a local terminal (tmux/screen) is deliberately not
+> planned — see DEVELOPMENT.md.
 >
 > [DEVELOPMENT.md](./DEVELOPMENT.md) explains the model the code is built on and
 > what running `claude remote-control` for real taught us about it.
@@ -293,7 +294,7 @@ is refused with a message saying to update, rather than being misread.
 
 Everything under `state/` belongs to the tool. `projects.json` can be deleted
 at any time and a `rescan` rebuilds it; `environments.json` cannot, since it is
-the only record of which multiplexer session belongs to which process.
+the only record of which process belongs to which project.
 
 ## Environment
 

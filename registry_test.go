@@ -17,8 +17,6 @@ func testEnvironment(path, name string) Environment {
 		PID:           4242,
 		StartedAt:     time.Now().Truncate(time.Second),
 		LogFile:       filepath.Join(path, ".log"),
-		Multiplexer:   MuxTmux,
-		MuxName:       "cmax-" + name,
 		SpawnMode:     SpawnSameDir,
 	}
 }
@@ -65,7 +63,7 @@ func TestRegistryRoundTrip(t *testing.T) {
 	if got.EnvironmentID != want.EnvironmentID || got.URL != want.URL {
 		t.Errorf("identity fields differ: got %+v", got)
 	}
-	if got.PID != want.PID || got.Multiplexer != want.Multiplexer || got.MuxName != want.MuxName {
+	if got.PID != want.PID || got.LogFile != want.LogFile {
 		t.Errorf("process fields differ: got %+v", got)
 	}
 	if got.SpawnMode != want.SpawnMode {
@@ -92,7 +90,6 @@ func TestRegistryPutReplacesRatherThanAppends(t *testing.T) {
 
 	second := testEnvironment(path, "api")
 	second.PID = 200
-	second.MuxName = "cmax-restarted"
 	if err := reg.Put(second); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -104,7 +101,7 @@ func TestRegistryPutReplacesRatherThanAppends(t *testing.T) {
 	if len(all) != 1 {
 		t.Fatalf("got %d records, want 1: %+v", len(all), all)
 	}
-	if all[0].PID != 200 || all[0].MuxName != "cmax-restarted" {
+	if all[0].PID != 200 {
 		t.Errorf("the newer record should have won, got %+v", all[0])
 	}
 }
@@ -306,22 +303,6 @@ func TestRescanRelabelsRunningEnvironments(t *testing.T) {
 	}
 	if stored.EnvironmentID != env.EnvironmentID || stored.PID != env.PID {
 		t.Errorf("relabelling disturbed process state: %+v", stored)
-	}
-}
-
-func TestRegistryNormalizesMissingMultiplexer(t *testing.T) {
-	// A hand-edited file may omit the field. Every switch on Multiplexer
-	// should see a real value rather than the empty string.
-	stateDir := t.TempDir()
-	mustWrite(t, stateFile(stateDir, "environments.json"),
-		`{"schema_version":1,"environments":[{"project_path":"/home/u/dev/api","project_name":"api"}]}`)
-
-	got, err := newRegistry(stateDir).Get("/home/u/dev/api")
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got.Multiplexer != MuxNone {
-		t.Errorf("multiplexer = %q, want %q", got.Multiplexer, MuxNone)
 	}
 }
 

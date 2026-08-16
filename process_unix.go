@@ -29,8 +29,8 @@ func processAlive(pid int) bool {
 }
 
 // terminateProcess signals the whole process group rather than a single PID.
-// Inside a multiplexer the process is one member of a pipeline, and signalling
-// only the first of them leaves the rest running.
+// claude is free to spawn its own children, and setDetached placed it in a
+// fresh group precisely so a single signal reaches all of them.
 func terminateProcess(pid int) error {
 	if pid <= 0 {
 		return nil

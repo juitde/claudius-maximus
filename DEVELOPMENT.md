@@ -47,17 +47,18 @@ pattern was anchored.
 
 **On a terminal, the first run blocks on an interactive prompt** asking whether
 sessions should share the project directory or each get a git worktree. Without
-a terminal it defaults silently. That combination is the worst possible one: the
-prompt appears only on the path this tool prefers — inside a multiplexer — where
-nothing is watching to answer it. `--spawn` is therefore always passed
-explicitly.
+a terminal it defaults silently. That combination is the worst possible one:
+the prompt appears only where a terminal is attached but nothing is watching
+it — a tmux or screen pane the caller happens to be running this from, for
+instance. `--spawn` is therefore always passed explicitly.
 
-Two smaller findings shaped details. The output is a redrawing TUI that emits
-cursor-movement escapes even when redirected to a file, so logs accumulate
-repeated frames and any excerpt shown to a user has to be stripped of control
-sequences. And the URL line is 107 characters, so at a terminal's default 80
-columns it wraps and the identifier splits across lines — which is why a
-multiplexer session must be created with an explicit width.
+Two smaller findings shaped details, discovered while running the manual test
+inside a tmux pane during this investigation. The output is a redrawing TUI
+that emits cursor-movement escapes even when redirected to a file, so logs
+accumulate repeated frames and any excerpt shown to a user has to be stripped
+of control sequences. And the URL line is 107 characters, so it wraps and the
+identifier splits across lines at a terminal's default 80 columns — which is
+why that manual test had to widen the pane to see the URL intact.
 
 ## The model: environments, not sessions
 
@@ -206,6 +207,24 @@ summary exists to remove.
 the directories that hold other projects from those that qualified for nothing.
 On a real tree that turned 23 lines into 3 that carry information.
 
+## Rejected: tmux and screen support
+
+An earlier iteration of this document deferred multiplexer support rather than
+rejecting it, and the registry briefly carried a `Multiplexer` field toward
+that end. Looking at what it would actually buy changed that.
+
+Once `claude remote-control` is connected, a terminal attached to it shows
+almost nothing — the session itself runs server-side, reached through the
+URL/app, not in that pane. The one interaction a multiplexer session would
+still offer is scanning the QR code, which needs a real terminal on the
+process. But that case gains nothing from this tool either: it only arises
+when sitting at the machine, where running `claude remote-control` directly
+already works. The tool's whole point is reaching a project from somewhere
+other than the machine it runs on, so the one case multiplexer support would
+serve is exactly the case that does not need it.
+
+Kept minimal instead: no `Multiplexer` field, no dispatch, one spawn path.
+
 ## Deferred, and why
 
 - **Cross-process file locking.** The mutex guards one process. Two processes
@@ -214,10 +233,6 @@ On a real tree that turned 23 lines into 3 that carry information.
   rather than corrupts.
 - **Self-termination from inside an environment.** Not needed for the case this
   was built for: stopping happens from outside.
-- **tmux and screen.** Their value is attaching from a local terminal, which is
-  secondary to reaching a session from elsewhere. The registry already carries
-  the `Multiplexer` field, and `isEnvironmentAlive` is the single function that
-  becomes a dispatch.
 - **`self-update`.** Needs published release artifacts to exist first. Its
   migration half, however, constrains decisions now — which is why the state
   files are versioned already.

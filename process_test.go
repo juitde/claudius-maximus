@@ -113,8 +113,8 @@ func TestResolveURLPatternOverride(t *testing.T) {
 }
 
 func TestClaudeArgsAlwaysPassesSpawnMode(t *testing.T) {
-	// Omitting it makes claude prompt as soon as it has a terminal, which is
-	// exactly the tmux path, where nobody is there to answer.
+	// Omitting it makes claude prompt as soon as it has a terminal, which
+	// would hang if this ever runs inside one with nobody there to answer.
 	for _, mode := range []SpawnMode{SpawnSameDir, SpawnWorktree} {
 		args := claudeArgs(mode)
 		if args[0] != "remote-control" {

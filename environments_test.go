@@ -126,7 +126,6 @@ func TestStartEnvironmentReplacesADeadRecord(t *testing.T) {
 	// A record left behind by a reboot or an outside kill.
 	stale := testEnvironment(projectPath, "api")
 	stale.PID = 999999
-	stale.Multiplexer = MuxNone
 	if err := svc.registry.Put(stale); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -257,7 +256,6 @@ func TestStopEnvironmentAlreadyDead(t *testing.T) {
 
 	stale := testEnvironment(projectPath, "api")
 	stale.PID = 999999
-	stale.Multiplexer = MuxNone
 	if err := svc.registry.Put(stale); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -295,7 +293,6 @@ func TestListEnvironments(t *testing.T) {
 	// A dead record from elsewhere must not appear.
 	ghost := testEnvironment(filepath.Join(projectPath, "..", "ghost"), "ghost")
 	ghost.PID = 999999
-	ghost.Multiplexer = MuxNone
 	if err := svc.registry.Put(ghost); err != nil {
 		t.Fatalf("put: %v", err)
 	}

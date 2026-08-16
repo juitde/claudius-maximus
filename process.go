@@ -68,8 +68,9 @@ const defaultSpawnTimeout = 60 * time.Second
 //
 // --spawn is always passed. Left off, claude asks which spawn mode to use as
 // soon as it has a terminal, and waits. Without a terminal it silently
-// defaults, so the prompt only appears on exactly the path this tool prefers —
-// inside tmux — where nobody is watching to answer it.
+// defaults — so the prompt only appears if this runs somewhere with a
+// terminal but no one watching it, such as a tmux pane the caller set up
+// independently of this tool.
 func claudeArgs(mode SpawnMode) []string {
 	return []string{"remote-control", "--spawn=" + string(mode)}
 }
@@ -77,8 +78,12 @@ func claudeArgs(mode SpawnMode) []string {
 // spawnPlain starts claude detached, with its output redirected to a log file,
 // and waits for the environment URL to appear.
 //
-// This is the fallback for machines with no multiplexer: it works, but nothing
-// can attach to the running process afterwards.
+// There is no way to attach a local terminal to the running process
+// afterwards, which is deliberately not a gap this tool fills: reaching a
+// project from somewhere other than the machine it runs on is the whole
+// point, and the one interaction that needs a real terminal — scanning the
+// QR code — is only useful when already sitting at that machine, where
+// starting `claude remote-control` directly works just as well.
 func spawnPlain(spec spawnSpec) (*spawnOutcome, error) {
 	pattern, err := resolveURLPattern()
 	if err != nil {

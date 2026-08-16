@@ -20,10 +20,10 @@ func setDetached(cmd *exec.Cmd) {
 // succeeds and a signal is needed to tell.
 //
 // This is an approximation: a PID belonging to a process that has exited but
-// whose handle is still held elsewhere can read as alive. It is good enough
-// here, because the plain-process path is the fallback for machines without a
-// multiplexer, and where tmux or screen is available their own session lookup
-// answers the question properly.
+// whose handle is still held elsewhere can read as alive. Good enough here —
+// nothing else on the machine has a reason to hold a handle on a claude
+// process this tool started — but a real signal-0 equivalent via
+// golang.org/x/sys/windows would close the gap if it ever mattered.
 func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
