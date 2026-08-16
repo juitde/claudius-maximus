@@ -111,10 +111,7 @@ func TestCheckSystemSleep(t *testing.T) {
 	// something this program's configuration can point elsewhere, unlike
 	// claudeBin. This just confirms the check runs on the machine it's
 	// actually built for and returns something.
-	check, ok := checkSystemSleep()
-	if !ok {
-		t.Fatal("expected a check on darwin")
-	}
+	check := checkSystemSleep()
 	if check.Name != "system sleep" {
 		t.Errorf("name = %q", check.Name)
 	}
