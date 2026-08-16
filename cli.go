@@ -109,6 +109,7 @@ func cliRescan(svc *Service, args []string) int {
 		printProjectGroup("added", result.Added)
 		printProjectGroup("removed", result.Removed)
 		printRenames(result.Renamed)
+		printEnvironmentRenames(result.RenamedEnvironments)
 		printRejections(summarizeRejections(result.Rejected))
 		printPruned(result.Pruned)
 	}

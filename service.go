@@ -19,6 +19,7 @@ type Service struct {
 	stateDir   string
 	configPath string
 	cachePath  string
+	registry   *Registry
 }
 
 func newService(stateDir string) *Service {
@@ -26,6 +27,7 @@ func newService(stateDir string) *Service {
 		stateDir:   stateDir,
 		configPath: filepath.Join(stateDir, "config.json"),
 		cachePath:  filepath.Join(stateDir, "projects.json"),
+		registry:   newRegistry(stateDir),
 	}
 }
 
@@ -88,6 +90,10 @@ type RescanResult struct {
 	Removed   []Project        `json:"removed,omitempty"`
 	Renamed   []RenamedProject `json:"renamed,omitempty"`
 	Unchanged int              `json:"unchanged"`
+	// RenamedEnvironments records running environments whose cached project
+	// name was updated to match. Bookkeeping only — nothing about the running
+	// process changes.
+	RenamedEnvironments []RenameEvent `json:"renamed_environments,omitempty"`
 	// Rejected lists directories a glob matched that did not qualify.
 	Rejected []RejectedDir `json:"rejected,omitempty"`
 	// Pruned counts, per directory name, how often ** recursion was stopped.
@@ -119,15 +125,29 @@ func (s *Service) Rescan() (*RescanResult, error) {
 		return nil, fmt.Errorf("write cache: %w", err)
 	}
 
+	// Keep running environments labelled with the names the cache now uses. A
+	// rescan can rename a project — a newcomer colliding with it forces both
+	// deeper — and an environment still carrying the old label would be
+	// unfindable by the name the user is now shown.
+	names := make(map[string]string, len(preflight.Scan.Projects))
+	for _, p := range preflight.Scan.Projects {
+		names[p.Path] = p.Name
+	}
+	renamedEnvironments, err := s.registry.RenameByPath(names)
+	if err != nil {
+		return nil, fmt.Errorf("update environment names: %w", err)
+	}
+
 	return &RescanResult{
-		Cache:     *cache,
-		Added:     preflight.Added,
-		Removed:   preflight.Removed,
-		Renamed:   preflight.Renamed,
-		Unchanged: preflight.Unchanged,
-		Rejected:  preflight.Scan.Rejected,
-		Pruned:    preflight.Scan.Pruned,
-		Warnings:  preflight.Scan.Warnings,
+		Cache:               *cache,
+		Added:               preflight.Added,
+		Removed:             preflight.Removed,
+		Renamed:             preflight.Renamed,
+		Unchanged:           preflight.Unchanged,
+		RenamedEnvironments: renamedEnvironments,
+		Rejected:            preflight.Scan.Rejected,
+		Pruned:              preflight.Scan.Pruned,
+		Warnings:            preflight.Scan.Warnings,
 	}, nil
 }
 

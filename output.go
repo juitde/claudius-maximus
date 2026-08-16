@@ -87,6 +87,18 @@ func printRenames(renames []RenamedProject) {
 	}
 }
 
+func printEnvironmentRenames(events []RenameEvent) {
+	if len(events) == 0 {
+		return
+	}
+	width := columnWidth(events, func(e RenameEvent) string { return e.OldName })
+
+	fmt.Printf("\n  running environments relabelled:\n")
+	for _, e := range events {
+		fmt.Printf("    %-*s -> %-*s  %s\n", width, e.OldName, width, e.NewName, shortenPath(e.ProjectPath))
+	}
+}
+
 func printPruned(pruned map[string]int) {
 	if len(pruned) == 0 {
 		return
