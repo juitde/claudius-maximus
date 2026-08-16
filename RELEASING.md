@@ -45,15 +45,23 @@ always, unless the bug genuinely no longer exists on `main`:
    git push -u origin release/v0.1
    ```
 
-3. Cherry-pick the exact commit merged in step 1 onto that branch:
+3. Cherry-pick the exact commit merged in step 1 onto a branch off it, and
+   open a PR into `release/v0.1` rather than pushing straight to it:
 
    ```bash
+   git switch -c backport/v0.1.1 release/v0.1
    git cherry-pick <the fix commit's SHA>
-   git push origin release/v0.1
+   git push -u origin backport/v0.1.1
+   gh pr create --base release/v0.1 --head backport/v0.1.1 --milestone v0.1.1
    ```
 
-4. Create a milestone `v0.1.1`, attach whatever issue tracks the bug, close
-   it.
+   A backport is, by definition, something happening after an initial release
+   has already shipped, so the same "no commit without a PR" rule that governs
+   `main` applies here too — merge it like any other PR once it's reviewed.
+
+4. Create a milestone `v0.1.1` (if step 3 didn't already reference an existing
+   one), attach whatever issue tracks the bug, close it once the PR above is
+   merged.
 
 Closing that milestone is what makes this a backport rather than an ordinary
 release: `milestone-release.yml` checks whether a `release/vMAJOR.MINOR`
@@ -68,10 +76,11 @@ where something on the release branch genuinely was not, or could not be,
 applied to `main` the same way.
 
 **If the bug no longer exists on `main`** (already fixed differently, or the
-affected code is gone), skip step 1 and write the fix directly on the release
-branch instead. The merge-up PR is then the real mechanism for deciding
-whether anything from it is still relevant going forward — resolve it like any
-other PR, including closing it unmerged if genuinely nothing applies.
+affected code is gone), skip step 1 and open the fix as a PR against the
+release branch instead of against `main`. The merge-up PR is then the real
+mechanism for deciding whether anything from it is still relevant going
+forward — resolve it like any other PR, including closing it unmerged if
+genuinely nothing applies.
 
 **Which milestone does the merge-up PR land in**, if `main` has more than one
 open milestone (say `v0.4.0` and `v1.0.0` both exist)? Whichever is

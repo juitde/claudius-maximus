@@ -29,15 +29,21 @@ the `cut-release` skill instead.
 4. **Stop here and present a plan**: the branch to create (or reuse), the
    exact commit to cherry-pick (its SHA and one-line summary), and the patch
    version this will become. Ask explicitly before touching git. Do not
-   create the branch, cherry-pick, or push anything before this confirmation.
-5. **Only once confirmed:** create the branch if needed, cherry-pick, push.
-   Report the result — including immediately if the cherry-pick conflicts;
-   do not attempt to silently resolve a conflict in a fix that is about to
-   ship as a patch release without showing what changed.
-6. **Create the patch milestone** (`vMAJOR.MINOR.PATCH+1`) and attach the
-   relevant issue, then present it for confirmation the same as the
-   `cut-release` skill's step 4 — closing it is what publishes this release.
-7. **Only once confirmed:** close the milestone.
+   create the branch, cherry-pick, or open anything before this confirmation.
+5. **Only once confirmed:** create the release branch if needed (from the
+   affected tag), then cherry-pick onto a new branch off it and open a PR
+   into `release/vMAJOR.MINOR` — not a direct push. A backport happens after
+   an initial release has already shipped, so the same "no commit without a
+   PR" rule already governing `main` applies here too. Report the result —
+   including immediately if the cherry-pick conflicts; do not attempt to
+   silently resolve a conflict in a fix that is about to ship as a patch
+   release without showing what changed.
+6. **Create the patch milestone** (`vMAJOR.MINOR.PATCH+1`) if it doesn't
+   already exist, and attach the cherry-pick PR and the relevant issue to it.
+7. **Once the cherry-pick PR is reviewed, merge it** (same sign-off as any
+   other PR merge), then present the milestone for confirmation the same as
+   the `cut-release` skill's step 4 — closing it is what publishes this
+   release. **Only once confirmed:** close the milestone.
 8. Once `milestone-release.yml` has run, a merge-up PR into `main` will exist.
    Report its URL and whether it shows any real changes or is empty as
    expected. Reviewing/merging that PR is a separate, later action — the
