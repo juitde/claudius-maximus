@@ -259,6 +259,39 @@ self-directed one, because there is no cheap, reliable way to tell in advance
 whether this call happens to be one — and delaying a kill that did not need
 delaying costs nothing anyone would notice.
 
+## Rejected: live sleep detection on Linux and Windows
+
+`doctor` checks whether macOS is set up to sleep, because `pmset -g` resolves
+the whole question — including any active override — into one documented,
+locally-verified line. Doing the same on Linux and Windows was considered and
+turned down, not attempted and abandoned: research into both turned up no
+citable exact output format to parse.
+
+`systemd-inhibit --list`'s column layout and its empty-list text are not in
+the man page, and no confirmed sample exists anywhere else searched. Writing a
+parser against a guessed shape is exactly the mistake this project already paid
+for once — the original `claude remote-control` URL pattern was wrong precisely
+because nobody had run the real thing first (see "What running the real thing
+taught us"). Here, running the real thing is not available: there is no
+reliably reproducible desktop session to test against the way `pmset` could be
+verified directly on this machine.
+
+The *configured* idle timeout has no portable Linux answer regardless of output
+parsing: `logind.conf`'s `IdleActionSec` is the only system-level setting, and
+GNOME and KDE both bypass it, calling `logind`'s `Suspend()` directly from
+their own power daemons — confirmed independently across their bug trackers,
+not merely suspected.
+
+Windows fares no better: `powercfg /requests`'s "nothing is active" output is
+undocumented too, and there is no scriptable equivalent of `caffeinate` at
+all — `SetThreadExecutionState` is a Win32 API call, not a shell command.
+
+Documentation fills the gap instead (see the README). A wrong recipe there is
+harmless — a user reads it, tries it, and notices immediately if it does not
+fit their setup. A wrong parser is not: it fails silently, in exactly the way
+this section exists to avoid repeating.
+
+
 ## Deferred, and why
 
 - **Cross-process file locking.** The mutex guards one process. Two processes

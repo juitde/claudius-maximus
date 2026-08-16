@@ -71,6 +71,9 @@ func (s *Service) Doctor() *DoctorReport {
 		s.checkStateDir(),
 		s.checkConfig(),
 	)
+	if check, ok := checkSystemSleep(); ok {
+		report.Checks = append(report.Checks, check)
+	}
 
 	cfg, cfgErr := loadConfig(s.configPath)
 	if cfgErr == nil {

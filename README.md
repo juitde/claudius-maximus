@@ -285,6 +285,131 @@ upgrade, a rebuild elsewhere). `claude mcp add` has no overwrite of its own; it
 refuses a duplicate name outright, so `--force` removes the old entry first and
 ignores the "nothing to remove" case, then adds fresh.
 
+## Staying reachable
+
+Two separate ways this machine can stop being reachable from a phone: it falls
+asleep, or nothing is running that could spawn a new environment for you.
+Neither is solved by installing something on your behalf — both are one-line
+recipes below, adapted to your platform.
+
+### Preventing sleep
+
+A sleeping machine suspends every running environment along with it. For
+Remote Control specifically, sleep is not a pause — the process loses its
+network connection to the phone.
+
+**macOS** — `doctor` checks this directly (see below), because `pmset -g`
+resolves the whole question, including any active override, into one line.
+Prevent it for a while with:
+
+```bash
+caffeinate -s &
+```
+
+or set sleep to *Never* in System Settings → Battery for something permanent.
+
+**Linux** (systemd-based distros) — prevent it for a while with:
+
+```bash
+systemd-inhibit --what=sleep --why="claudius-maximus environments" sleep infinity &
+```
+
+There is no `doctor` check here on purpose. Detecting whether something is
+*already* inhibiting sleep would mean parsing `systemd-inhibit --list`, whose
+exact output format has no citable documentation to build against — the kind
+of guess that has already cost this project a rewrite once (see
+DEVELOPMENT.md's URL-pattern story). And the *configured* idle timeout has no
+portable answer at all: GNOME and KDE each manage it themselves and bypass
+`logind`'s own `IdleActionSec`, confirmed by their own bug trackers. Check your
+desktop environment's power settings if this machine sleeps unexpectedly.
+
+**Windows** — Settings → System → Power & battery → Screen and sleep, set
+sleep to *Never*. There is no built-in command-line equivalent of `caffeinate`;
+`powercfg /requests` reports active power requests but does not create one, and
+its exact output for "nothing is active" is not documented anywhere citable
+either. A small dedicated utility (search for "Caffeine" or "Insomnia" style
+tools) is the practical option if you need this from a script.
+
+### Keeping an orchestrator environment available
+
+`start` is idempotent — reconnecting to an existing environment rather than
+duplicating it costs nothing (see "Running environments" above) — so the way
+to always have *something* available to spawn new project environments from is
+just: run `start` against one real project, regularly. No new concept, no
+fabricated "meta" directory; pick any project you already have and designate it
+your standing jumping-off point.
+
+**macOS**, a launchd user agent — save as
+`~/Library/LaunchAgents/com.example.claudius-maximus.orchestrator.plist` and
+load with `launchctl load <path>`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.example.claudius-maximus.orchestrator</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/claudius-maximus</string>
+    <string>start</string>
+    <string>--project</string>
+    <string>orchestrator</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>300</integer>
+</dict>
+</plist>
+```
+
+**Linux**, a systemd user timer — save the two files below under
+`~/.config/systemd/user/`, then `systemctl --user enable --now
+claudius-maximus-orchestrator.timer`. Also run `loginctl enable-linger $USER`
+once, or the timer stops the moment you log out — which, for a machine you
+reach by *not* being logged in, defeats the point.
+
+`claudius-maximus-orchestrator.service`:
+
+```ini
+[Unit]
+Description=Ensure the claudius-maximus orchestrator environment is running
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/claudius-maximus start --project orchestrator
+```
+
+`claudius-maximus-orchestrator.timer`:
+
+```ini
+[Unit]
+Description=Periodically ensure the claudius-maximus orchestrator environment is running
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+```
+
+**Windows**, two Scheduled Tasks (one schedule type per `schtasks /create`
+call, so it takes two — one for login, one for periodic re-checks):
+
+```bat
+schtasks /create /tn "ClaudiusMaximusOrchestrator" /sc onlogon /rl highest ^
+  /tr "C:\path\to\claudius-maximus.exe start --project orchestrator"
+schtasks /create /tn "ClaudiusMaximusOrchestratorRecheck" /sc minute /mo 5 ^
+  /tr "C:\path\to\claudius-maximus.exe start --project orchestrator"
+```
+
+Every recipe above just calls `start` on a schedule; adjust the project name
+and binary path for your setup.
+
+
 ## State directory
 
 ```
