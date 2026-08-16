@@ -27,3 +27,9 @@ claudius-maximus version
 ```
 
 More commands land as the build progresses.
+
+## License
+
+Copyright 2026 JUIT GmbH
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE).
