@@ -10,8 +10,12 @@ but is not available on Team plans. This tool fills that gap — a running
 orchestrator session (or a shell) can spawn, track and tear down remote-control
 sessions for any project on the machine.
 
-> **Status:** under construction. See [DEVELOPMENT.md](./DEVELOPMENT.md) for the
-> design decisions and the current build order.
+> **Status:** working, unreleased. Environments can be started, listed and
+> stopped from the command line and over MCP. Attaching from a local terminal
+> (tmux/screen) and published binaries are not there yet.
+>
+> [DEVELOPMENT.md](./DEVELOPMENT.md) explains the model the code is built on and
+> what running `claude remote-control` for real taught us about it.
 
 ## Build
 
