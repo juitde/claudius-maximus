@@ -279,6 +279,12 @@ Deliberately not exposed as MCP tools: `install` and `uninstall`. Registering
 this server from inside itself would require it to already be registered and
 running.
 
+`install --force` replaces an existing registration under the same name and
+scope instead of failing — useful after this binary has moved (a Homebrew
+upgrade, a rebuild elsewhere). `claude mcp add` has no overwrite of its own; it
+refuses a duplicate name outright, so `--force` removes the old entry first and
+ignores the "nothing to remove" case, then adds fresh.
+
 ## State directory
 
 ```

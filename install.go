@@ -21,6 +21,8 @@ func cliInstall(svc *Service, args []string) int {
 	fs := newFlagSet("install")
 	name := fs.String("name", appName, "name to register the MCP server under")
 	scope := fs.String("scope", "user", "MCP scope: user, project or local")
+	force := fs.Bool("force", false,
+		"replace an existing registration under this name and scope, instead of failing")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -36,10 +38,21 @@ func cliInstall(svc *Service, args []string) int {
 			svc.claudeBin, envClaudeBin))
 	}
 
+	if *force {
+		// claude mcp add refuses a duplicate name+scope outright; it does not
+		// overwrite. Removing first — and ignoring the error, since "nothing
+		// registered yet" is the common case — is what makes --force actually
+		// replace a stale registration (for instance after this binary moved)
+		// rather than just repeating the same failure.
+		_ = exec.Command(svc.claudeBin, "mcp", "remove", *name, "--scope", *scope).Run()
+	}
+
 	cmd := exec.Command(svc.claudeBin, "mcp", "add", "--scope", *scope, *name, "--", self, mcpCommand)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fail(fmt.Errorf("claude mcp add failed: %w", err))
+		return fail(fmt.Errorf(
+			"claude mcp add failed: %w (if a registration already exists under this name and scope, rerun with --force to replace it)",
+			err))
 	}
 
 	fmt.Printf("\nRegistered %q (scope %s) pointing at %s\n", *name, *scope, self)

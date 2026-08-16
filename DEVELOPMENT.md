@@ -104,6 +104,14 @@ The exceptions are `install` and `uninstall`, which are CLI-only. An MCP tool
 that registers its own server would have to be running, and therefore already
 registered, in order to register itself.
 
+`install --force` exists because `claude mcp add` has no overwrite of its
+own — confirmed against the real command, not assumed — and errors outright on
+a duplicate name and scope. `--force` removes any existing registration first,
+ignoring the "nothing to remove" case, then adds fresh. That sidesteps needing
+to detect *why* `add` failed from its error text, which would be the same kind
+of undocumented-output guess this document argues against elsewhere; removing
+unconditionally needs no such guess.
+
 ## Discovery: curation, not correctness
 
 A directory qualifies as a project if it carries one of a set of marker files.
