@@ -16,6 +16,8 @@ sessions for any project on the machine.
 >
 > [DEVELOPMENT.md](./DEVELOPMENT.md) explains the model the code is built on and
 > what running `claude remote-control` for real taught us about it.
+> [CONTRIBUTING.md](./CONTRIBUTING.md) has the build/test commands and commit
+> style for anyone sending a PR.
 
 ## Build
 
