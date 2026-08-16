@@ -18,7 +18,7 @@ notes, README, announcements). Use periods, commas or colons instead.
   commit style (small, ordered, each one green on its own; explanatory
   messages, not Conventional Commits).
 - **[RELEASING.md](../RELEASING.md)** — the release process: SemVer
-  milestones, how Release Drafter and the milestone-close automation fit
+  milestones, how the milestone-draft and milestone-close automation fit
   together, and how to backport a fix to an older line. Use the
   `cut-release`, `backport-fix`, `find-affected-versions` and
   `fix-affected-versions` skills to walk through it rather than re-deriving

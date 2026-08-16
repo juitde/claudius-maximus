@@ -298,9 +298,33 @@ it does.
 
 **Artifacts and notes are separate concerns, deliberately.** GoReleaser builds
 and attaches binaries; it never decides what a release says about itself.
-Release Drafter maintains the notes as PRs merge; it never builds anything.
-Neither could do the other's job as well as a tool built for it, and keeping
-them separate means a mistake in one cannot corrupt the other's output.
+`milestone-draft.yml` maintains the notes as PRs merge; it never builds
+anything. Keeping them separate means a mistake in one cannot corrupt the
+other's output.
+
+**Release Drafter was tried first, and dropped.** It filled the "maintain the
+notes" role above for the earlier part of this project, until the amount of
+scaffolding built around what it could not do outweighed what it still did.
+It has no concept of milestones at all: its one running draft is "everything
+merged since the last published tag," not "everything attached to this
+milestone" — safe only as long as exactly one milestone is ever being worked
+on, which is why a whole separate daily check
+(`milestone-version-check.yml`) and a pre-publish safeguard against a PR
+merging under the wrong milestone existed. It also refuses to compute
+anything — no categorized PR list, no resolved version — until a *published*
+release exists to diff against, which this project's actual first release
+hit directly: the drafted body stayed "No changes" and the suggested version
+stuck at a bare patch bump regardless of what had actually merged, because
+there was no prior release for it to compare against yet. On top of that, its
+category-matching schema changed incompatibly between its major versions
+(`@v6` rejected the config written against `@v7`'s documented schema
+outright), discovered only by reading the source pinned to each tag, not by
+trusting either version's own README on `master`. Rendering a milestone's
+notes directly from the PRs actually attached to it
+(`render_milestone_notes.py`) has none of these problems: it is correct by
+construction regardless of how many milestones are open at once or whether
+any release has ever been published, and it needed replacing exactly one
+external dependency with about 150 lines of tested Python to get there.
 
 **The release trigger is `release: published`, not `push: tags`.** A tag
 created by publishing a GitHub Release — which is how every release here gets
