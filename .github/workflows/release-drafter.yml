@@ -14,7 +14,13 @@ jobs:
   update_draft:
     runs-on: ubuntu-latest
     steps:
-      - uses: release-drafter/release-drafter@v6
+      # v7, not v6: release-drafter.yml's categories use the condition/`type`
+      # schema (`when:`, `type: pre-exclude`, a titleless catch-all category),
+      # which v6.x's config validator rejects outright. Confirmed against the
+      # README pinned to the exact commit each major tag resolves to, not
+      # against master, since master had already drifted past what v6 itself
+      # validates.
+      - uses: release-drafter/release-drafter@v7
         with:
           config-name: release-drafter.yml
         env:
