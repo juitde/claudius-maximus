@@ -93,6 +93,33 @@ jobs:
         # attaches the GoReleaser artifacts — kept as a separate workflow
         # because it is also the one a backport release triggers.
 
+      - name: Prepend the milestone description to the published notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed via env, not interpolated directly into the script, since
+          # this is attacker-influenceable content (anyone who can edit the
+          # milestone) — env expansion is subject to normal shell quoting
+          # rather than being spliced into the script text itself.
+          MILESTONE_DESCRIPTION: ${{ github.event.milestone.description }}
+        run: |
+          if [ -z "$MILESTONE_DESCRIPTION" ]; then
+            echo "No milestone description set; leaving the generated notes as-is."
+            exit 0
+          fi
+          tag="${{ steps.version.outputs.version }}"
+          # The event payload's milestone.description is whatever it was at
+          # the moment this milestone was closed — the description can be
+          # rewritten any number of times beforehand, including after further
+          # PR merges have made Release Drafter recompute the draft body
+          # underneath it, with no race: this step runs once, after
+          # publishing, and reads the milestone directly rather than
+          # anything that could have been overwritten by another workflow
+          # run in between. See RELEASING.md.
+          current_body=$(gh release view "$tag" --json body --jq '.body')
+          notes_file=$(mktemp)
+          printf '%s\n\n%s\n' "$MILESTONE_DESCRIPTION" "$current_body" > "$notes_file"
+          gh release edit "$tag" --notes-file "$notes_file"
+
       - name: Open a merge-up PR into main, if this came from a release branch
         if: steps.target.outputs.from_release_branch == 'true'
         env:

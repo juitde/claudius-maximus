@@ -338,18 +338,21 @@ ordering is the one piece of real logic in the whole design, which is why it
 is a separately tested Python script
 (`.github/scripts/next_milestone.py`) rather than inline shell.
 
-**A release-specific introduction is written by hand, directly on the draft,
-right before closing the milestone — not through a dedicated "finalize"
-step.** `milestone-release.yml`'s publish step only ever changes a release's
-tag, target and draft flag; it never touches the notes body. A hand-written
-intro therefore survives publishing intact, as long as no further PR merges
-(and therefore no further Release Drafter run) happen between writing it and
-closing the milestone. A dedicated workflow to protect against that narrow
-race was considered and dropped: the race is entirely within the releaser's
-own control — don't merge anything else in the few minutes between writing the
-intro and closing the milestone — and building automation to guard a window
-the human already controls would be solving a problem that mostly does not
-occur.
+**A release-specific introduction is written by hand into the milestone's own
+description, not onto the draft.** The first version of this design wrote it
+directly on the draft release, on the reasoning that `milestone-release.yml`'s
+publish step never touches the notes body, so a hand-written intro would
+survive publishing intact as long as nothing else merged (and re-triggered
+Release Drafter) between writing it and closing the milestone — a race judged
+narrow enough to leave to the releaser's own discipline rather than build
+automation around. Drafting the actual `v0.1.0` notes hit that race twice in
+one sitting, which settled the question the theoretical version had left open.
+Release Drafter has no concept of milestones at all, so writing the intro
+there instead removes the race by construction rather than by discipline:
+`milestone-release.yml` reads the milestone's description straight from the
+milestone-closed event and prepends it to the published notes at publish
+time, however many times it was rewritten and however many PRs merged in
+between.
 
 **Backporting fixes forward before backporting them.** When a bug affects an
 older line and still exists on `main`, the fix lands on `main` first, and the

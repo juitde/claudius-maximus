@@ -10,13 +10,13 @@
 # whole body on every run and would silently discard anything typed into the
 # draft directly.
 #
-# A release-specific introduction is instead added by hand, directly on the
-# draft, right before closing the milestone — see RELEASING.md. Publishing
-# (milestone-release.yml) only ever changes the draft's tag, target and draft
-# flag; it never touches the notes body, so a hand-written intro survives
-# publish intact, provided no further PR merges (and therefore no further
-# Release Drafter run) happen in between writing it and closing the
-# milestone.
+# A release-specific introduction is instead written by hand into the
+# milestone's own description, not onto the draft — see RELEASING.md.
+# milestone-release.yml prepends it to the published notes at publish time,
+# reading it straight from the milestone-closed event. Release Drafter has no
+# concept of milestones and never touches one, so the description can be
+# rewritten any number of times, at any point, with no race against further
+# PR merges recomputing this draft's body underneath it.
 
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"

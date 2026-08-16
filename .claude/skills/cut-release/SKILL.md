@@ -25,20 +25,27 @@ from `main`, not from the old line.
    Report this plainly — do not assume "closed enough" on the user's behalf.
 3. **Show the current draft.** `gh release list --json isDraft,tagName,name`
    to find it, then `gh release view <tag>` for its body. This is what will
-   ship if nothing more is added.
+   ship if nothing more is added, aside from the milestone's own description
+   (see step 5), which the draft itself never shows.
 4. **Stop here and present a plan** — the milestone title/version, what is
    still open (if anything), and the current draft's contents — and ask
-   explicitly whether to proceed. Do not close the milestone, edit the draft,
-   or push anything before this confirmation. Closing the milestone is
-   itself the trigger that publishes and builds the release; it is not a
-   reversible "just checking" action.
+   explicitly whether to proceed. Do not close the milestone, edit its
+   description, or push anything before this confirmation. Closing the
+   milestone is itself the trigger that publishes and builds the release; it
+   is not a reversible "just checking" action.
 5. **If the user wants an intro paragraph added**, draft the wording and show
    it before writing it — this is release-facing prose someone else will
    read, not an internal decision, so it gets the same sign-off as step 4,
-   not less.
-6. **Only once confirmed:** apply the intro to the draft if requested
-   (`gh release edit <tag> --notes "..."`, prepending to what is already
-   there — do not lose the existing $CHANGES list), then close the milestone
-   (`gh issue ... `/`gh api` or via the web UI) to publish.
+   not less. Write it into the **milestone's description**, not the draft:
+   `gh api repos/{owner}/{repo}/milestones/{milestone_number} -X PATCH -f description="..."`.
+   Unlike editing the draft, this can be redone as many times as needed with
+   no race against Release Drafter recomputing the draft body from further PR
+   merges — Release Drafter never reads milestones at all.
+6. **Only once confirmed:** write the intro to the milestone's description if
+   requested, then close the milestone (`gh api ... -X PATCH -f state=closed`
+   or via the web UI) to publish. `milestone-release.yml` prepends whatever is
+   in the description at that moment to the drafted notes automatically; there
+   is nothing further to apply to the draft itself.
 7. Report back once `milestone-release.yml` and then `release.yml` have run —
-   link the published release and confirm the artifacts attached.
+   link the published release and confirm both the intro and the artifacts
+   are attached.

@@ -53,7 +53,8 @@ alone is simpler and is what this skill calls internally anyway.
    cherry-pick the fix onto a new branch off it, and open a PR into
    `release/vX.Y` - never a direct push, per `backport-fix`. Create the
    line's patch milestone if it doesn't already exist, and attach the PR
-   (and the original issue) to it.
+   (and the original issue) to it. A per-line note, if wanted, goes into that
+   line's milestone description, same mechanism as `backport-fix`'s step 6.
 8. **Report every opened PR together**, grouped by line. Merging is a
    separate action per PR - only merge one after it's been reviewed and
    explicitly confirmed, same as any other PR here.
