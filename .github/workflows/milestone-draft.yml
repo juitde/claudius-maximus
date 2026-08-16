@@ -26,6 +26,12 @@ name: Milestone Draft
 # longer matches an open milestone, so at most one draft ever exists for the
 # next main-targeted release and at most one per already-published line's
 # next patch - never a stray left behind by a deleted or renamed milestone.
+#
+# Every draft also previews the milestone's own description above the PR
+# list, read fresh each run - see milestone-release.yml, which computes the
+# published notes the same way rather than reusing whatever the draft
+# happened to already contain, so this preview and the eventual real thing
+# can never disagree or double up.
 on:
   push:
     branches: [main, "release/**"]
@@ -76,7 +82,8 @@ jobs:
         run: |
           branch="${{ github.ref_name }}"
           candidates=""
-          for title in $(gh api repos/${{ github.repository }}/milestones --jq '.[].title'); do
+          numbers=""
+          while IFS=$'\t' read -r number title; do
             if [[ "$title" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
               line="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
               has_branch=false
@@ -89,19 +96,24 @@ jobs:
                 # is ever open at a time.
                 if [ "$has_branch" = "false" ]; then
                   candidates="$candidates $title"
+                  numbers="$numbers $number"
                 fi
               elif [ "$branch" = "release/v$line" ]; then
                 candidates="$candidates $title"
+                numbers="$numbers $number"
               fi
             fi
-          done
+          done < <(gh api repos/${{ github.repository }}/milestones --jq '.[] | "\(.number)\t\(.title)"')
           count=$(echo "$candidates" | wc -w)
           if [ "$count" -ne 1 ]; then
             echo "Found $count milestone(s) targeting $branch ($candidates); need exactly one to draft against, skipping."
             echo "found=false" >> "$GITHUB_OUTPUT"
           else
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "title=$(echo "$candidates" | xargs)" >> "$GITHUB_OUTPUT"
+            {
+              echo "found=true"
+              echo "title=$(echo "$candidates" | xargs)"
+              echo "number=$(echo "$numbers" | xargs)"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Update the draft for this milestone
@@ -110,13 +122,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           title="${{ steps.milestone.outputs.title }}"
+          number="${{ steps.milestone.outputs.number }}"
           branch="${{ github.ref_name }}"
+
+          # A live preview of what closing this milestone right now would
+          # publish - the milestone's description stays the one place this
+          # is actually authored (see RELEASING.md); this only ever reads it
+          # fresh, never copies it anywhere that could then go stale or
+          # accidentally become a second source of truth.
+          description=$(gh api "repos/${{ github.repository }}/milestones/$number" --jq '.description // ""')
 
           prs=$(gh pr list --search "milestone:\"$title\" is:merged" \
             --json number,title,labels --jq '[.[] | {number, title, labels: [.labels[].name]}]')
-          notes=$(echo "$prs" | python3 .github/scripts/render_milestone_notes.py)
+          changes=$(echo "$prs" | python3 .github/scripts/render_milestone_notes.py)
+
           notes_file=$(mktemp)
-          printf '%s\n' "$notes" > "$notes_file"
+          if [ -n "$description" ]; then
+            printf '%s\n\n%s\n' "$description" "$changes" > "$notes_file"
+          else
+            printf '%s\n' "$changes" > "$notes_file"
+          fi
 
           if gh release view "$title" --json isDraft --jq '.isDraft' 2>/dev/null | grep -q true; then
             gh release edit "$title" --notes-file "$notes_file" --target "$branch"
