@@ -21,13 +21,13 @@
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 
-# This is the current documented `categories` schema (condition objects under
-# `when`, category `type` for non-rendering behavior), not the older flat
+# This is the schema release-drafter's pinned major version (@v7, see
+# release-drafter.yml the workflow) actually validates: condition objects
+# under `when`, category `type` for non-rendering behavior. The older flat
 # `labels:`/top-level `exclude-labels:`/top-level `version-resolver:` schema
-# release-drafter also still parses without error. Written against the
-# schema actually documented for the pinned `@v6` action, not carried over
-# from an older example, since a config that parses without complaint is not
-# the same as a config that does what it looks like it does.
+# belongs to @v6 and was rejected outright by @v6's own validator the one
+# time it was tried here — a config that parses as YAML is not the same as a
+# config the pinned action version accepts.
 categories:
   # pre-exclude runs before changelog rendering and version resolution, so a
   # PR labeled this way contributes nothing at all, not even to $CHANGES.
@@ -35,13 +35,7 @@ categories:
     when:
       label: no-release-notes
 
-  # type: version-resolver with no title renders no changelog section; it
-  # only feeds $RESOLVED_VERSION. Kept separate from a rendered "Breaking
-  # changes" section on purpose: this project has no changelog section for
-  # breaking changes to show yet (see the 0.x note below), but a breaking
-  # label should still be able to push the suggested version to major once
-  # that becomes relevant.
-  - type: version-resolver
+  - title: "Breaking Changes"
     semver-increment: major
     when:
       label: breaking
