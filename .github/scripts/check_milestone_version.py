@@ -2,12 +2,9 @@
 """Checks whether an open milestone's title covers at least the version bump
 its attached PRs' labels actually require.
 
-Mirrors release-drafter.yml's category-to-bump mapping (breaking -> major,
-feature/improvement -> minor, everything else that isn't excluded -> patch,
-no-release-notes -> excluded entirely, same as release-drafter.yml's
-pre-exclude) so the two cannot drift apart silently - this script is the one
-place that mapping is expressed for this purpose, and release-drafter.yml
-should be read alongside it if either ever changes.
+Uses the same category-to-bump mapping as render_milestone_notes.py (see
+release_categories.py) so the version check and the rendered notes can never
+silently disagree about what a label means.
 
 Checks both directions: a milestone titled too low for what is attached to it
 (a breaking-labeled PR sitting in a milestone titled for a minor release), and
@@ -15,15 +12,16 @@ one titled too high for what remains attached (titled for a major release
 after its one breaking-labeled PR was removed or reassigned elsewhere).
 Deliberately only detects a mismatch and describes it; it never picks a
 replacement title or renames anything. This project's stance throughout is
-that a human decides the actual version number every time (see
-release-drafter.yml's own note on $RESOLVED_VERSION) - either direction of
-mismatch is exactly the kind of thing that stance means a human should look
-at, not something worth automating away.
+that a human decides the actual version number every time - either direction
+of mismatch is exactly the kind of thing that stance means a human should
+look at, not something worth automating away.
 """
 
 import json
 import re
 import sys
+
+from release_categories import label_bump
 
 SEMVER = re.compile(
     r"^v(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$"
@@ -39,18 +37,6 @@ def parse_semver(title):
     if not m:
         return None
     return (int(m["major"]), int(m["minor"]), int(m["patch"]))
-
-
-def label_bump(labels):
-    """The bump one PR's labels require, or None if the PR is excluded from
-    release notes (and therefore from version resolution) entirely."""
-    if "no-release-notes" in labels:
-        return None
-    if "breaking" in labels:
-        return "major"
-    if "feature" in labels or "improvement" in labels:
-        return "minor"
-    return "patch"  # bug/documentation/unlabeled/anything else: Miscellaneous
 
 
 def required_bump(pr_label_lists):
