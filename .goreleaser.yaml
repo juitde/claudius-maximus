@@ -46,3 +46,11 @@ release:
 # already cover the source case without GoReleaser producing a redundant copy.
 source:
   enabled: false
+
+# Deliberately no brews/nfpms/scoops/aurs/winget/dockers/chocolateys sections.
+# This is a standalone tool distributed as the archives above; it is not
+# meant to be packaged into any OS package manager or container registry, and
+# the language it happens to be written in is not something users of the tool
+# need to care about. (It also is not meant to be imported as a Go module by
+# other programs, though that is already enforced structurally: every file is
+# `package main`, which Go itself refuses to let anything else import.)
