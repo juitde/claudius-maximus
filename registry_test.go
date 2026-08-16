@@ -193,7 +193,7 @@ func TestRegistryListAliveLeavesFileAloneWhenNothingDied(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 
-	path := filepath.Join(stateDir, "environments.json")
+	path := stateFile(stateDir, "environments.json")
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -313,7 +313,7 @@ func TestRegistryNormalizesMissingMultiplexer(t *testing.T) {
 	// A hand-edited file may omit the field. Every switch on Multiplexer
 	// should see a real value rather than the empty string.
 	stateDir := t.TempDir()
-	mustWrite(t, filepath.Join(stateDir, "environments.json"),
+	mustWrite(t, stateFile(stateDir, "environments.json"),
 		`[{"project_path":"/home/u/dev/api","project_name":"api"}]`)
 
 	got, err := newRegistry(stateDir).Get("/home/u/dev/api")
@@ -327,7 +327,7 @@ func TestRegistryNormalizesMissingMultiplexer(t *testing.T) {
 
 func TestRegistryReportsMalformedFile(t *testing.T) {
 	stateDir := t.TempDir()
-	path := filepath.Join(stateDir, "environments.json")
+	path := stateFile(stateDir, "environments.json")
 	mustWrite(t, path, `[{"project_path":`)
 
 	_, err := newRegistry(stateDir).List()

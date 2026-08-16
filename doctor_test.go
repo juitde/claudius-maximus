@@ -28,7 +28,7 @@ func TestPreflightLeavesTheCacheUntouched(t *testing.T) {
 		t.Fatalf("rescan: %v", err)
 	}
 
-	cachePath := filepath.Join(stateDir, "projects.json")
+	cachePath := stateFile(stateDir, "projects.json")
 	before, err := os.ReadFile(cachePath)
 	if err != nil {
 		t.Fatalf("read cache: %v", err)
@@ -203,7 +203,7 @@ func TestDoctorChecks(t *testing.T) {
 
 	t.Run("malformed configuration fails and skips the scan", func(t *testing.T) {
 		stateDir := t.TempDir()
-		mustWrite(t, filepath.Join(stateDir, "config.json"), `{"project_globs":`)
+		mustWrite(t, configFile(stateDir), `{"project_globs":`)
 
 		report := newService(stateDir).Doctor()
 		if !report.failed() {

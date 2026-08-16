@@ -86,7 +86,18 @@ func (s *Service) Doctor() *DoctorReport {
 }
 
 func (s *Service) checkStateDir() CheckResult {
-	probe := filepath.Join(s.stateDir, ".doctor-probe")
+	// Create the layout rather than assuming someone else did: whether it can
+	// be created is part of what this check is for, and doctor is exactly the
+	// command someone runs before anything else has had a chance to.
+	if err := ensureLayout(s.stateDir); err != nil {
+		return CheckResult{
+			Name: "state directory", Status: StatusFail,
+			Detail:  err.Error(),
+			FixHint: "check permissions, or set " + envHome + " to a writable directory",
+		}
+	}
+
+	probe := stateFile(s.stateDir, ".doctor-probe")
 	if err := os.WriteFile(probe, []byte("ok"), 0o600); err != nil {
 		return CheckResult{
 			Name: "state directory", Status: StatusFail,

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 )
 
@@ -16,8 +15,8 @@ func run(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		return fail(fmt.Errorf("create state directory %s: %w", stateDir, err))
+	if err := ensureLayout(stateDir); err != nil {
+		return fail(err)
 	}
 
 	return runCLI(newService(stateDir), args)

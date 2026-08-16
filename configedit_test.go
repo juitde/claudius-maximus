@@ -371,7 +371,7 @@ func TestServiceEditConfigPersists(t *testing.T) {
 
 func TestServiceEditConfigLeavesFileUntouchedOnError(t *testing.T) {
 	stateDir := t.TempDir()
-	path := filepath.Join(stateDir, "config.json")
+	path := configFile(stateDir)
 	mustWrite(t, path, "{\n  \"project_globs\": [\n    \"~/dev/*\"\n  ]\n}\n")
 
 	before, err := os.ReadFile(path)

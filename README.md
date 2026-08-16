@@ -210,11 +210,26 @@ file just to become visible.
 
 Session management commands land as the build progresses.
 
+## State directory
+
+```
+~/.claudius-maximus/
+  config.json               yours — edit by hand or through `config`
+  state/projects.json       derived from a scan, replaced by every rescan
+  state/environments.json   the record of running processes
+  state/logs/               output of those processes
+```
+
+Everything under `state/` belongs to the tool. `projects.json` can be deleted
+at any time and a `rescan` rebuilds it; `environments.json` cannot, since it is
+the only record of which multiplexer session belongs to which process.
+
 ## Environment
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CLAUDIUS_HOME` | `~/.claudius-maximus` | State directory (config, caches, logs) |
+| `CLAUDIUS_HOME` | `~/.claudius-maximus` | State directory |
+| `CLAUDIUS_URL_PATTERN` | built-in | Regular expression extracting the environment URL from claude's output; needs one capture group for the ID |
 
 ## License
 

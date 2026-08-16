@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 	"time"
 )
@@ -25,8 +24,8 @@ type Service struct {
 func newService(stateDir string) *Service {
 	return &Service{
 		stateDir:   stateDir,
-		configPath: filepath.Join(stateDir, "config.json"),
-		cachePath:  filepath.Join(stateDir, "projects.json"),
+		configPath: configFile(stateDir),
+		cachePath:  stateFile(stateDir, "projects.json"),
 		registry:   newRegistry(stateDir),
 	}
 }

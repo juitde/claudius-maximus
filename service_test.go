@@ -18,7 +18,7 @@ func newTestService(t *testing.T, cfg Config) (*Service, string) {
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
 	}
-	mustWrite(t, filepath.Join(stateDir, "config.json"), string(data))
+	mustWrite(t, configFile(stateDir), string(data))
 
 	return newService(stateDir), stateDir
 }
@@ -149,7 +149,7 @@ func TestServiceRescanPersistsCacheToDisk(t *testing.T) {
 
 func TestServiceRescanFailsOnMalformedConfig(t *testing.T) {
 	stateDir := t.TempDir()
-	mustWrite(t, filepath.Join(stateDir, "config.json"), `{"project_globs":`)
+	mustWrite(t, configFile(stateDir), `{"project_globs":`)
 
 	if _, err := newService(stateDir).Rescan(); err == nil {
 		t.Fatal("expected an error for a malformed config")

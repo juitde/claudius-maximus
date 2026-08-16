@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -96,7 +95,7 @@ type Registry struct {
 }
 
 func newRegistry(stateDir string) *Registry {
-	return &Registry{path: filepath.Join(stateDir, "environments.json")}
+	return &Registry{path: stateFile(stateDir, "environments.json")}
 }
 
 func (r *Registry) load() ([]Environment, error) {

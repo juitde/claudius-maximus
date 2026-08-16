@@ -466,6 +466,9 @@ func mustMkdir(t *testing.T, dir string) {
 
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
+	// Create the parent so fixtures can name a path under state/ without
+	// each test having to lay out the directory first.
+	mustMkdir(t, filepath.Dir(path))
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
