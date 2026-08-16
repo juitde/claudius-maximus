@@ -208,7 +208,40 @@ requirement. This tool runs `claude` in the directory, and `claude` runs
 anywhere. If your globs are already precise, say so rather than adding a marker
 file just to become visible.
 
-Session management commands land as the build progresses.
+## Running environments
+
+```bash
+claudius-maximus start --project api    # or --path ~/some/directory
+claudius-maximus list
+claudius-maximus stop  --project api
+```
+
+```
+$ claudius-maximus start --project api
+Started api
+  https://claude.ai/code?environment=env_01LB1RYiukoQKoCU4JLEVnWA
+```
+
+Open that link on your phone, or in the Claude mobile app, and create sessions
+inside it.
+
+One process serves one directory — claude calls it an environment and hosts up
+to 32 sessions in it. It also keeps the same environment per directory across
+restarts, so starting twice reconnects rather than duplicating:
+
+```
+$ claudius-maximus start --project api
+Already running: api
+  https://claude.ai/code?environment=env_01LB1RYiukoQKoCU4JLEVnWA
+```
+
+`--path` takes any directory, whether or not discovery found it. Marker
+filtering curates the project list; it does not decide where claude may run.
+
+`--spawn same-dir|worktree` overrides `spawn_mode` for a single start. See
+`config schema` for what the two mean, and why `same-dir` is the default.
+
+MCP tools land as the build progresses.
 
 ## State directory
 

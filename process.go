@@ -102,9 +102,15 @@ func spawnPlain(spec spawnSpec) (*spawnOutcome, error) {
 	}
 	pid := cmd.Process.Pid
 
-	// Let the process go rather than reaping it: it has to outlive whichever
-	// of our entry points started it.
-	cmd.Process.Release()
+	// Reap the child in the background rather than releasing it.
+	//
+	// Releasing looks like the right move — the process must outlive whichever
+	// entry point started it, and it does either way, being detached in its own
+	// process group and reparented when we exit. But an unreaped child that
+	// terminates stays a zombie, and a zombie answers signal 0, so every
+	// liveness check would call a dead environment alive for as long as this
+	// process lives. Waiting does not hold the child; it only collects it.
+	go func() { _ = cmd.Wait() }()
 
 	url, environmentID, err := awaitURL(spec.LogPath, pattern, spec.Timeout, func() bool {
 		return processAlive(pid)

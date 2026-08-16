@@ -33,6 +33,12 @@ func runCLI(svc *Service, args []string) int {
 		return cliListProjects(svc, args[1:])
 	case "rescan":
 		return cliRescan(svc, args[1:])
+	case "start":
+		return cliStart(svc, args[1:])
+	case "stop":
+		return cliStop(svc, args[1:])
+	case "list":
+		return cliList(svc, args[1:])
 	case "config":
 		return cliConfig(svc, args[1:])
 	case "doctor":
@@ -51,6 +57,10 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `%s %s
 
 Usage:
+  %[3]s start --project <name>   Start a remote-control environment for a project
+  %[3]s stop  --project <name>   Stop it again
+  %[3]s list                     Show the environments now running
+
   %[3]s doctor [--json]      Report on the setup and preview what a rescan would do
   %[3]s config <subcommand>  Inspect or edit the configuration ('config' for details)
   %[3]s rescan               Scan the configured globs and refresh the project cache
@@ -118,6 +128,83 @@ func cliRescan(svc *Service, args []string) int {
 	for _, w := range result.Warnings {
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
+	return exitOK
+}
+
+// targetFlags registers the project selectors shared by start and stop.
+func targetFlags(fs *flag.FlagSet) (name, path *string) {
+	name = fs.String("project", "", "project name from list-projects")
+	path = fs.String("path", "", "project directory, as an alternative to --project")
+	return name, path
+}
+
+func cliStart(svc *Service, args []string) int {
+	fs := newFlagSet("start")
+	name, path := targetFlags(fs)
+	spawn := fs.String("spawn", "", "override the configured spawn mode for this start")
+	asJSON := fs.Bool("json", false, "print the result as JSON")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	result, err := svc.StartEnvironment(StartArgs{
+		Target:    ProjectTarget{Name: *name, Path: *path},
+		SpawnMode: SpawnMode(*spawn),
+	})
+	if err != nil {
+		return fail(err)
+	}
+	if *asJSON {
+		return printJSON(result)
+	}
+
+	verb := "Started"
+	if result.AlreadyRunning {
+		verb = "Already running:"
+	}
+	fmt.Printf("%s %s\n  %s\n", verb, result.Environment.ProjectName, result.Environment.URL)
+	return exitOK
+}
+
+func cliStop(svc *Service, args []string) int {
+	fs := newFlagSet("stop")
+	name, path := targetFlags(fs)
+	asJSON := fs.Bool("json", false, "print the result as JSON")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	result, err := svc.StopEnvironment(ProjectTarget{Name: *name, Path: *path})
+	if err != nil {
+		return fail(err)
+	}
+	if *asJSON {
+		return printJSON(result)
+	}
+	fmt.Printf("Stopped %s\n", result.Environment.ProjectName)
+	return exitOK
+}
+
+func cliList(svc *Service, args []string) int {
+	mode, ok := parseOutputMode("list", args)
+	if !ok {
+		return exitUsage
+	}
+
+	environments, err := svc.ListEnvironments()
+	if err != nil {
+		return fail(err)
+	}
+	if mode == outputJSON {
+		return printJSON(environments)
+	}
+	if len(environments) == 0 {
+		fmt.Printf("No environments running. Start one with '%s start --project <name>'.\n", appName)
+		return exitOK
+	}
+
+	fmt.Printf("%s running\n\n", plural(len(environments), "environment"))
+	printEnvironments(environments, mode)
 	return exitOK
 }
 

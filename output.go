@@ -87,6 +87,20 @@ func printRenames(renames []RenamedProject) {
 	}
 }
 
+func printEnvironments(environments []Environment, mode outputMode) {
+	width := columnWidth(environments, func(e Environment) string { return e.ProjectName })
+
+	for _, env := range environments {
+		fmt.Printf("  %-*s  %s\n", width, env.ProjectName, env.URL)
+		if mode != outputVerbose {
+			continue
+		}
+		fmt.Printf("  %-*s  %s, started %s\n", width, "", shortenPath(env.ProjectPath), humanizeSince(env.StartedAt))
+		fmt.Printf("  %-*s  spawn %s · pid %d · log %s\n",
+			width, "", env.SpawnMode, env.PID, shortenPath(env.LogFile))
+	}
+}
+
 func printEnvironmentRenames(events []RenameEvent) {
 	if len(events) == 0 {
 		return

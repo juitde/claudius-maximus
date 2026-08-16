@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,28 @@ func resolveStateDir() (string, error) {
 		return "", fmt.Errorf("determine home directory (set %s to override): %w", envHome, err)
 	}
 	return filepath.Join(home, "."+appName), nil
+}
+
+// envClaudeBin points at the claude executable. Prefixed rather than a bare
+// CLAUDE_BIN, which is a name other tooling could plausibly claim.
+const envClaudeBin = envPrefix + "CLAUDE_BIN"
+
+func resolveClaudeBin() string {
+	if bin := os.Getenv(envClaudeBin); bin != "" {
+		return bin
+	}
+	return "claude"
+}
+
+// logFileFor names the log for a project's environment.
+//
+// The base name makes it recognisable and the path digest makes it unique:
+// two projects called "api" in different directories are different
+// environments and must not write to the same file.
+func logFileFor(home, projectPath string) string {
+	digest := sha256.Sum256([]byte(projectPath))
+	name := fmt.Sprintf("%s-%x.log", sanitizeSegment(filepath.Base(projectPath)), digest[:4])
+	return filepath.Join(logsDir(home), name)
 }
 
 // Layout of the state directory:

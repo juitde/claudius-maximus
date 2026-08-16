@@ -18,6 +18,7 @@ type Service struct {
 	stateDir   string
 	configPath string
 	cachePath  string
+	claudeBin  string
 	registry   *Registry
 }
 
@@ -26,6 +27,7 @@ func newService(stateDir string) *Service {
 		stateDir:   stateDir,
 		configPath: configFile(stateDir),
 		cachePath:  stateFile(stateDir, "projects.json"),
+		claudeBin:  resolveClaudeBin(),
 		registry:   newRegistry(stateDir),
 	}
 }
