@@ -22,11 +22,78 @@ make check     # go vet + go test
 
 ## Usage
 
+Point the tool at the directories that hold your projects:
+
 ```bash
-claudius-maximus version
+# ~/.claudius-maximus/config.json
+{
+  "project_globs": ["~/dev/*", "~/work/*/*"]
+}
 ```
 
-More commands land as the build progresses.
+Then scan them:
+
+```bash
+claudius-maximus rescan           # discover projects, assign names
+claudius-maximus list-projects    # print the cached list
+```
+
+`rescan` keeps every project name as short as it can while staying unique —
+`api` stays `api` unless a second `api` shows up, at which point both grow a
+parent segment (`dev-api`, `client-a-api`). `list-projects` reads only the
+cache and never scans, so every caller sees the same list until the next
+`rescan`.
+
+### Which directories count as projects
+
+A matched directory needs at least one marker file. The defaults cover one
+canonical root file per ecosystem:
+
+| | |
+|---|---|
+| Version control | `.git`, `.hg`, `.svn`, `CLAUDE.md` |
+| Go, JS, Rust, PHP | `go.mod`, `package.json`, `deno.json`, `Cargo.toml`, `composer.json` |
+| Python | `pyproject.toml`, `setup.py`, `requirements.txt`, `Pipfile` |
+| JVM | `pom.xml`, `build.gradle[.kts]`, `settings.gradle[.kts]`, `build.sbt`, `deps.edn`, `project.clj` |
+| .NET | `*.sln`, `*.csproj`, `*.fsproj` |
+| Ruby, Elixir, Erlang | `Gemfile`, `*.gemspec`, `mix.exs`, `rebar.config` |
+| C/C++ and friends | `CMakeLists.txt`, `meson.build`, `configure.ac`, `Makefile`, `Package.swift`, `*.xcodeproj`, `build.zig`, `pubspec.yaml`, `stack.yaml`, `*.cabal` |
+| Infrastructure | `*.tf`, `.terraform.lock.hcl`, `terragrunt.hcl`, `ansible.cfg`, `Chart.yaml`, `kustomization.yaml`, `flake.nix` |
+| Containers | `Dockerfile`, `docker-compose.y[a]ml`, `compose.yaml` |
+
+This keeps scratch directories out of a broad glob like `~/dev/*` — which
+matters for more than tidiness, since every extra entry is another chance for a
+name collision, and collisions make names longer for whoever collides.
+
+Markers may be literal names or glob patterns. Override them with
+`project_markers`:
+
+```jsonc
+{
+  "project_globs": ["~/dev/*"],
+  "project_markers": ["go.mod", "*.tf"]   // only these count, defaults do not merge in
+}
+```
+
+```jsonc
+{
+  "project_globs": ["~/work/acme/*"],
+  "project_markers": []   // no filtering — every matched directory counts
+}
+```
+
+The empty list is worth knowing about: markers are a convenience filter, not a
+requirement. This tool runs `claude` in the directory, and `claude` runs
+anywhere. If your globs are already precise, say so rather than adding a marker
+file just to become visible.
+
+Session management commands land as the build progresses.
+
+## Environment
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CLAUDIUS_HOME` | `~/.claudius-maximus` | State directory (config, caches, logs) |
 
 ## License
 
