@@ -13,7 +13,9 @@ def check_eq(label, got, want):
 
 check_eq("breaking wins over everything else", label_bump(["breaking", "bug"]), "major")
 check_eq("feature without breaking", label_bump(["feature"]), "minor")
+check_eq("improvement is also a minor", label_bump(["improvement"]), "minor")
 check_eq("bug alone is a patch", label_bump(["bug"]), "patch")
+check_eq("documentation alone is a patch", label_bump(["documentation"]), "patch")
 check_eq("unlabeled falls to patch (Miscellaneous)", label_bump([]), "patch")
 check_eq("no-release-notes excludes regardless of other labels", label_bump(["no-release-notes", "breaking"]), None)
 

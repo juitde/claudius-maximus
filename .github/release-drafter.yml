@@ -52,7 +52,7 @@ categories:
       label: feature
 
   - title: "Improvements"
-    semver-increment: patch
+    semver-increment: minor
     when:
       label: improvement
 
@@ -61,10 +61,15 @@ categories:
     when:
       label: bug
 
+  - title: "Documentation"
+    semver-increment: patch
+    when:
+      label: documentation
+
   # No `when`: the one changelog category allowed to omit it, so it becomes
-  # the bucket for every PR that didn't match feature/improvement/bug above
-  # (unlabeled PRs, or ones labeled documentation/dependencies/chore/etc.).
-  # Still contributes patch to $RESOLVED_VERSION like everything else here.
+  # the bucket for every PR that didn't match any category above (unlabeled
+  # PRs, or ones labeled dependencies/chore/etc.). Still contributes patch to
+  # $RESOLVED_VERSION like everything else here.
   - title: "Miscellaneous"
     semver-increment: patch
 

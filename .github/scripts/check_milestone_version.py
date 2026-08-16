@@ -3,7 +3,7 @@
 its attached PRs' labels actually require.
 
 Mirrors release-drafter.yml's category-to-bump mapping (breaking -> major,
-feature -> minor, everything else that isn't excluded -> patch,
+feature/improvement -> minor, everything else that isn't excluded -> patch,
 no-release-notes -> excluded entirely, same as release-drafter.yml's
 pre-exclude) so the two cannot drift apart silently - this script is the one
 place that mapping is expressed for this purpose, and release-drafter.yml
@@ -48,9 +48,9 @@ def label_bump(labels):
         return None
     if "breaking" in labels:
         return "major"
-    if "feature" in labels:
+    if "feature" in labels or "improvement" in labels:
         return "minor"
-    return "patch"  # improvement/bug/unlabeled/anything else: Miscellaneous
+    return "patch"  # bug/documentation/unlabeled/anything else: Miscellaneous
 
 
 def required_bump(pr_label_lists):
