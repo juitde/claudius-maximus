@@ -123,6 +123,14 @@ picks a reasonable default, not a final answer.
 - `release.yml` runs when a release is published (by either of the above, or
   by hand) and attaches the build artifacts via GoReleaser. It does not decide
   what gets released — only builds what already has a release object.
+- `milestone-version-check.yml` runs daily and on PR label/milestone changes.
+  It compares the version bump the milestone targeting `main` is titled for
+  against what its attached PRs' labels actually require (mirroring
+  release-drafter.yml's category mapping) and fails loudly on a mismatch in
+  either direction — titled too low for a breaking-labeled PR that landed in
+  it, or still titled for a major release after that label was removed or
+  reassigned. It never retitles the milestone; a human decides the actual
+  number, same as everywhere else in this process.
 - **Nothing here ever creates, renames, or switches which branch is the
   repository's default.** `main` is permanent. This is a deliberate difference
   from tools like `laminas/automatic-releases`, which rotate the default

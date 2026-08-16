@@ -1,0 +1,72 @@
+name: Milestone Version Check
+
+# Warns, never renames, when the single open milestone targeting main (see
+# RELEASING.md: only one ever does) is titled for a different version bump
+# than what its attached PRs' labels actually require - a "breaking" PR
+# landing in a milestone titled for a minor release, or a milestone still
+# titled for a major release after its one breaking-labeled PR was removed
+# or reassigned. Consistent with this project's rule that a human decides
+# the actual version number every time (see release-drafter.yml): this
+# workflow only ever fails loudly to say the title looks wrong, it never
+# retitles the milestone itself. Runs daily so a mismatch surfaces even
+# without further PR activity, and on the PR events that could create one.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  pull_request:
+    types: [labeled, unlabeled, milestoned, demilestoned, closed]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find the milestone targeting main
+        id: milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A patch/backport milestone (vMAJOR.MINOR.PATCH for a line that
+          # already has a release/vMAJOR.MINOR branch) is not this check's
+          # concern: its version is already fully determined by construction
+          # (the next patch off an existing release), nothing to compare
+          # against. Whatever open milestone has no matching release branch
+          # is the one targeting main.
+          candidates=""
+          for title in $(gh api repos/${{ github.repository }}/milestones --jq '.[].title'); do
+            if [[ "$title" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              line="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+              if ! git ls-remote --exit-code --heads origin "release/v$line" >/dev/null 2>&1; then
+                candidates="$candidates $title"
+              fi
+            fi
+          done
+          count=$(echo "$candidates" | wc -w)
+          if [ "$count" -ne 1 ]; then
+            echo "Found $count milestone(s) targeting main ($candidates); need exactly one to compare against, skipping."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "title=$(echo "$candidates" | xargs)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the milestone's title against its attached PRs
+        if: steps.milestone.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="${{ steps.milestone.outputs.title }}"
+          base=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo '')
+          labels_json=$(gh pr list --milestone "$title" --state all --json labels \
+            --jq '[.[].labels | map(.name)]')
+          if ! message=$(echo "$labels_json" | python3 .github/scripts/check_milestone_version.py "$base" "$title"); then
+            echo "::error::$message"
+            exit 1
+          fi
+          echo "$title looks consistent with its attached PRs (previous release: ${base:-none yet})."
