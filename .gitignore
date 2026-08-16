@@ -1,0 +1,13 @@
+# Build output
+/claudius-maximus
+/cmax
+/dist/
+
+# Go
+*.test
+*.out
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
