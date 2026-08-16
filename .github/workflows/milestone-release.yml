@@ -71,11 +71,18 @@ jobs:
             gh release edit "$draft_tag" --tag "$tag" --target "$ref" --draft=false
           else
             echo "No draft found; creating $tag directly with generated notes"
+            # origin/$ref, not $ref: checkout only puts the triggering branch
+            # (main) into a local branch of that name. A release/vX.Y branch
+            # only exists locally as a remote-tracking ref after fetch-depth:
+            # 0, so the bare branch name would fail to resolve for git
+            # (gh's own --target above is unaffected — it resolves branch
+            # names against the API, not the local repo).
+            #
             # No trailing ^: at this point ref has not been tagged with the
             # new version yet, so the nearest reachable tag already is the
             # correct "previous release" — walking one commit further back
             # would risk skipping past it.
-            prev_tag=$(git describe --tags --abbrev=0 "$ref" 2>/dev/null || echo '')
+            prev_tag=$(git describe --tags --abbrev=0 "origin/$ref" 2>/dev/null || echo '')
             if [ -n "$prev_tag" ]; then
               gh release create "$tag" --target "$ref" --title "$tag" --generate-notes --notes-start-tag "$prev_tag"
             else

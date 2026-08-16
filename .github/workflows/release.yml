@@ -1,8 +1,8 @@
 name: Release
 
 # Fires on a published GitHub Release, not on a tag push. A release's tag is
-# usually created by publishing the release itself (via the web UI, the
-# finalize-release workflow, or `gh release create` for a backport) — and a
+# usually created by publishing the release itself (via the web UI, or
+# milestone-release.yml's `gh release edit`/`gh release create`) — and a
 # tag created that way, using the workflow's own GITHUB_TOKEN, does not
 # reliably fire `push: tags` at all, by GitHub's own anti-recursion design for
 # GITHUB_TOKEN-driven events. `release: published` is the trigger actually

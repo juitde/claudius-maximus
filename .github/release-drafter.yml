@@ -1,7 +1,8 @@
 # Maintains one running draft release, updated on every push to main. The
 # draft itself is the answer to "is a release ready yet" — it exists,
 # visibly, as an unpublished GitHub Release that grows PR by PR; publishing it
-# (via the finalize-release workflow) is the deliberate "yes, now" moment.
+# (by closing the milestone — see milestone-release.yml) is the deliberate
+# "yes, now" moment.
 #
 # The template only ever holds the auto-generated PR list. header/footer are
 # static config, the same text every time — not a place to hand-write a
@@ -36,12 +37,12 @@ exclude-labels:
 change-template: "- $TITLE (#$NUMBER)"
 change-title-escapes: '\<*_&'
 
-# $RESOLVED_VERSION is a starting suggestion, not the final word: the
-# finalize-release workflow always takes an explicit version input rather
-# than trusting this unconditionally. That matters most during the 0.x beta
-# phase, where a "breaking" label resolving to a major bump (1.0.0) would be
-# premature — the human decides the actual number every time; this only gives
-# them something to look at while deciding.
+# $RESOLVED_VERSION is a starting suggestion, not the final word:
+# milestone-release.yml always takes the closed milestone's title as the
+# actual version rather than trusting this unconditionally. That matters most
+# during the 0.x beta phase, where a "breaking" label resolving to a major
+# bump (1.0.0) would be premature — the human decides the actual number every
+# time; this only gives them something to look at while deciding.
 version-resolver:
   major:
     labels: [breaking]

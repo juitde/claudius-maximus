@@ -52,16 +52,23 @@ always, unless the bug genuinely no longer exists on `main`:
    git switch -c backport/v0.1.1 release/v0.1
    git cherry-pick <the fix commit's SHA>
    git push -u origin backport/v0.1.1
-   gh pr create --base release/v0.1 --head backport/v0.1.1 --milestone v0.1.1
+   gh pr create --base release/v0.1 --head backport/v0.1.1
    ```
 
    A backport is, by definition, something happening after an initial release
    has already shipped, so the same "no commit without a PR" rule that governs
    `main` applies here too — merge it like any other PR once it's reviewed.
 
-4. Create a milestone `v0.1.1` (if step 3 didn't already reference an existing
-   one), attach whatever issue tracks the bug, close it once the PR above is
-   merged.
+4. Create a milestone `v0.1.1` (if one doesn't already exist for it), attach
+   the PR from step 3 and whatever issue tracks the bug to it:
+
+   ```bash
+   gh pr edit backport/v0.1.1 --milestone v0.1.1
+   ```
+
+   (`--milestone` can't be passed at `gh pr create` time in step 3 — the
+   milestone doesn't exist yet then.) Merge the PR once it's reviewed, then
+   close the milestone.
 
 Closing that milestone is what makes this a backport rather than an ordinary
 release: `milestone-release.yml` checks whether a `release/vMAJOR.MINOR`
