@@ -8,6 +8,16 @@ Versions are [SemVer](https://semver.org/), tagged `vMAJOR.MINOR.PATCH`. The
 project is currently in its `0.x` phase: nothing is guaranteed stable yet, and
 that is deliberate — see the first milestone.
 
+**Only one milestone targeting `main` is ever open at a time** — the next
+release, major or minor depending on what's actually merged since the last
+one shipped. Patch/bugfix milestones for older, already-superseded lines are
+the exception: several of those can be open in parallel, one per affected
+`release/vX.Y` branch, entirely independent of each other and of whatever is
+queued for `main`. `milestone-release.yml` enforces the `main` rule: it
+refuses to publish if the current draft contains a PR milestoned for a
+different release than the one being closed, rather than silently shipping
+someone else's not-yet-ready work under the wrong version.
+
 ## The short version
 
 1. Plan a release as a GitHub **milestone** named exactly `vMAJOR.MINOR.PATCH`

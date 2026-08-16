@@ -47,6 +47,52 @@ jobs:
             echo "from_release_branch=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Refuse to publish if the draft contains another milestone's PRs
+        if: steps.target.outputs.from_release_branch == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Release Drafter has no concept of milestones: its one running
+          # draft is simply "every PR merged to main since the last
+          # published tag", regardless of which milestone any of them were
+          # attached to. RELEASING.md's rule — only one milestone targeting
+          # main is ever open at a time — is what makes that safe in the
+          # ordinary case. This step enforces that rule rather than trusting
+          # it: if it were ever violated (a later milestone's PR merged to
+          # main while an earlier one is still open), closing the earlier
+          # one would publish the later milestone's not-yet-ready PRs under
+          # the wrong version, and — because Release Drafter's next
+          # comparison baseline becomes this new tag — they would then never
+          # appear in the later milestone's own draft either. Caught here,
+          # loudly, rather than shipped silently.
+          tag="${{ steps.version.outputs.version }}"
+          draft_tag=$(gh release list --json isDraft,tagName \
+            --jq 'map(select(.isDraft))[0].tagName // empty')
+          if [ -z "$draft_tag" ]; then
+            echo "No draft exists; nothing to check."
+            exit 0
+          fi
+
+          # change-template in release-drafter.yml is "- $TITLE (#$NUMBER)",
+          # so every entry in the drafted body ends in a PR reference in
+          # that exact form — this is our own template, not a guess at
+          # someone else's output format.
+          pr_numbers=$(gh release view "$draft_tag" --json body --jq '.body' \
+            | grep -oE '\(#[0-9]+\)' | tr -d '(#)')
+
+          mismatched=""
+          for n in $pr_numbers; do
+            pr_milestone=$(gh pr view "$n" --json milestone --jq '.milestone.title // empty')
+            if [ -n "$pr_milestone" ] && [ "$pr_milestone" != "$tag" ]; then
+              mismatched="$mismatched #$n(milestone:$pr_milestone)"
+            fi
+          done
+
+          if [ -n "$mismatched" ]; then
+            echo "::error::The current draft includes PRs milestoned for a different release, not $tag:$mismatched. Reassign them to $tag if they belong in this release, or hold off closing $tag until that other milestone has shipped first — see RELEASING.md."
+            exit 1
+          fi
+
       - name: Tag and publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
