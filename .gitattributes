@@ -1,0 +1,8 @@
+# Keep line endings LF everywhere, including in Windows working trees.
+#
+# Without this, Git's default autocrlf on Windows rewrites every file to CRLF
+# on checkout, and `gofmt -l` then reports the entire repository as needing
+# reformatting — which is what it did the first time CI ran there. The Go
+# toolchain writes LF regardless of platform, so declaring it here is simply
+# saying what is already true.
+* text=auto eol=lf
