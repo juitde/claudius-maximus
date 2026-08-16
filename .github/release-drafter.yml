@@ -21,18 +21,52 @@
 name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 
+# This is the current documented `categories` schema (condition objects under
+# `when`, category `type` for non-rendering behavior), not the older flat
+# `labels:`/top-level `exclude-labels:`/top-level `version-resolver:` schema
+# release-drafter also still parses without error. Written against the
+# schema actually documented for the pinned `@v6` action, not carried over
+# from an older example, since a config that parses without complaint is not
+# the same as a config that does what it looks like it does.
 categories:
-  - title: "Breaking changes"
-    labels: [breaking]
-  - title: "Features"
-    labels: [enhancement]
-  - title: "Fixes"
-    labels: [bug]
-  - title: "Other"
-    labels: [documentation, dependencies, chore]
+  # pre-exclude runs before changelog rendering and version resolution, so a
+  # PR labeled this way contributes nothing at all, not even to $CHANGES.
+  - type: pre-exclude
+    when:
+      label: no-release-notes
 
-exclude-labels:
-  - skip-changelog
+  # type: version-resolver with no title renders no changelog section; it
+  # only feeds $RESOLVED_VERSION. Kept separate from a rendered "Breaking
+  # changes" section on purpose: this project has no changelog section for
+  # breaking changes to show yet (see the 0.x note below), but a breaking
+  # label should still be able to push the suggested version to major once
+  # that becomes relevant.
+  - type: version-resolver
+    semver-increment: major
+    when:
+      label: breaking
+
+  - title: "New Features"
+    semver-increment: minor
+    when:
+      label: feature
+
+  - title: "Improvements"
+    semver-increment: patch
+    when:
+      label: improvement
+
+  - title: "Bugfixes"
+    semver-increment: patch
+    when:
+      label: bug
+
+  # No `when`: the one changelog category allowed to omit it, so it becomes
+  # the bucket for every PR that didn't match feature/improvement/bug above
+  # (unlabeled PRs, or ones labeled documentation/dependencies/chore/etc.).
+  # Still contributes patch to $RESOLVED_VERSION like everything else here.
+  - title: "Miscellaneous"
+    semver-increment: patch
 
 change-template: "- $TITLE (#$NUMBER)"
 change-title-escapes: '\<*_&'
@@ -43,14 +77,6 @@ change-title-escapes: '\<*_&'
 # during the 0.x beta phase, where a "breaking" label resolving to a major
 # bump (1.0.0) would be premature — the human decides the actual number every
 # time; this only gives them something to look at while deciding.
-version-resolver:
-  major:
-    labels: [breaking]
-  minor:
-    labels: [enhancement]
-  patch:
-    labels: [bug, documentation, dependencies, chore]
-  default: patch
 
 template: |
   ## Changes
