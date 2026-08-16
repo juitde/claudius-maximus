@@ -8,6 +8,28 @@ import (
 	"time"
 )
 
+// stubClaude stands in for the claude binary so that doctor tests describe the
+// tool's own behaviour rather than whatever happens to be installed on the
+// machine running them. CI has no claude; a developer's machine does, and a
+// test that passes only on one of the two is worse than no test.
+func stubClaude(t *testing.T) string {
+	t.Helper()
+	return fakeClaude(t, `case "$1" in
+  --version) echo "2.1.233 (Claude Code)" ;;
+  mcp)       echo "`+appName+`: /somewhere/`+appName+` mcp" ;;
+esac
+`)
+}
+
+// healthyService is a service whose surroundings are all in order, so a test
+// asserting "nothing failed" is asserting something about this code.
+func healthyService(t *testing.T, cfg Config) (*Service, string) {
+	t.Helper()
+	svc, stateDir := newTestService(t, cfg)
+	svc.claudeBin = stubClaude(t)
+	return svc, stateDir
+}
+
 func findCheck(t *testing.T, report *DoctorReport, name string) CheckResult {
 	t.Helper()
 	for _, c := range report.Checks {
@@ -170,7 +192,7 @@ func TestDoctorChecks(t *testing.T) {
 		root := t.TempDir()
 		makeProject(t, filepath.Join(root, "api"), "go.mod")
 
-		svc, _ := newTestService(t, Config{ProjectGlobs: []string{filepath.Join(root, "*")}})
+		svc, _ := healthyService(t, Config{ProjectGlobs: []string{filepath.Join(root, "*")}})
 		if _, err := svc.Rescan(); err != nil {
 			t.Fatalf("rescan: %v", err)
 		}
@@ -188,7 +210,9 @@ func TestDoctorChecks(t *testing.T) {
 	})
 
 	t.Run("no configuration yet", func(t *testing.T) {
-		report := newService(t.TempDir()).Doctor()
+		svc := newService(t.TempDir())
+		svc.claudeBin = stubClaude(t)
+		report := svc.Doctor()
 
 		if report.failed() {
 			t.Errorf("a missing config is a warning, not a failure: %+v", report.Checks)
@@ -205,7 +229,9 @@ func TestDoctorChecks(t *testing.T) {
 		stateDir := t.TempDir()
 		mustWrite(t, configFile(stateDir), `{"project_globs":`)
 
-		report := newService(stateDir).Doctor()
+		svc := newService(stateDir)
+		svc.claudeBin = stubClaude(t)
+		report := svc.Doctor()
 		if !report.failed() {
 			t.Error("a malformed config must be a failure")
 		}
@@ -220,7 +246,7 @@ func TestDoctorChecks(t *testing.T) {
 		root := t.TempDir()
 		makeProject(t, filepath.Join(root, "api"), "go.mod")
 
-		svc, _ := newTestService(t, Config{ProjectGlobs: []string{filepath.Join(root, "*")}})
+		svc, _ := healthyService(t, Config{ProjectGlobs: []string{filepath.Join(root, "*")}})
 		if _, err := svc.Rescan(); err != nil {
 			t.Fatalf("rescan: %v", err)
 		}
@@ -399,5 +425,22 @@ func TestCheckClaudeBinaryMissing(t *testing.T) {
 	}
 	if got.FixHint == "" {
 		t.Error("a failure should say what to do about it")
+	}
+}
+
+func TestDoctorSkipsChecksThatNeedTheBinary(t *testing.T) {
+	// With no claude to run, the version and registration checks can only
+	// repeat what the binary check already said. One problem, one message.
+	svc := newService(t.TempDir())
+	svc.claudeBin = filepath.Join(t.TempDir(), "definitely-not-here")
+
+	report := svc.Doctor()
+	for _, c := range report.Checks {
+		if c.Name == "claude version" || c.Name == "mcp registration" {
+			t.Errorf("%q should have been skipped when the binary is missing", c.Name)
+		}
+	}
+	if got := findCheck(t, report, "claude binary"); got.Status != StatusFail {
+		t.Errorf("the binary check should still fail, got %v", got.Status)
 	}
 }

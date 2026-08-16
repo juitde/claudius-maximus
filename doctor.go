@@ -55,11 +55,19 @@ func (r *DoctorReport) failed() bool {
 func (s *Service) Doctor() *DoctorReport {
 	report := &DoctorReport{Version: version, StateDir: s.stateDir}
 
+	// The version and registration checks both work by running claude. With no
+	// claude to run they can only repeat the news the binary check already
+	// delivered, three times over, so they are skipped instead.
+	binary := s.checkClaudeBinary()
+	report.Checks = append(report.Checks, binary)
+	if binary.Status != StatusFail {
+		report.Checks = append(report.Checks,
+			s.checkClaudeVersion(),
+			s.checkMCPRegistration(),
+		)
+	}
 	report.Checks = append(report.Checks,
-		s.checkClaudeBinary(),
-		s.checkClaudeVersion(),
 		checkAuthBlockers(),
-		s.checkMCPRegistration(),
 		s.checkStateDir(),
 		s.checkConfig(),
 	)
