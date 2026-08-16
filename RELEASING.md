@@ -16,10 +16,15 @@ that is deliberate — see the first milestone.
    Drafter](https://github.com/release-drafter/release-drafter) keeps one
    draft release up to date automatically as they land — open the repo's
    Releases page any time to see it grow.
-3. When ready to ship: open the draft, write a short intro above the
-   auto-generated list if you want one, save it. Then close the milestone.
-4. Closing the milestone publishes the release and triggers the build. Watch
-   the Actions tab; artifacts appear on the release once it finishes.
+3. When ready to ship: if you want a release-specific intro, write it into
+   the **milestone's own description** (edit the milestone, not the draft
+   release). It can be rewritten as many times as you like, whenever you
+   like; unlike editing the draft directly, nothing here overwrites it, since
+   Release Drafter never touches milestones.
+4. Close the milestone. This publishes the release and triggers the build.
+   Watch the Actions tab; artifacts appear on the release once it finishes.
+   Whatever is in the milestone's description at the moment it closes gets
+   prepended to the drafted notes automatically.
 
 That is the whole process for an ordinary release out of `main`. Everything
 below is about the case that needs more care: a fix for a version that is no
@@ -102,8 +107,9 @@ picks a reasonable default, not a final answer.
 - `milestone-release.yml` runs when a milestone closes. It validates the
   title, decides `main` vs. an existing `release/vX.Y` branch, promotes the
   matching draft (or creates the release directly if none exists — the normal
-  case for a backport, which Release Drafter does not track), and opens the
-  merge-up PR when releasing from a release branch.
+  case for a backport, which Release Drafter does not track), prepends the
+  milestone's own description to the published notes if one was written, and
+  opens the merge-up PR when releasing from a release branch.
 - `release.yml` runs when a release is published (by either of the above, or
   by hand) and attaches the build artifacts via GoReleaser. It does not decide
   what gets released — only builds what already has a release object.

@@ -14,3 +14,4 @@
 
 # Editor/agent tooling metadata that does not belong in the repo
 .serena/
+.claude/scheduled_tasks.lock

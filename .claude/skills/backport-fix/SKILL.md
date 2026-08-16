@@ -40,6 +40,11 @@ the `cut-release` skill instead.
    release without showing what changed.
 6. **Create the patch milestone** (`vMAJOR.MINOR.PATCH+1`) if it doesn't
    already exist, and attach the cherry-pick PR and the relevant issue to it.
+   If the user wants a note on what this patch fixes beyond the bare PR
+   title, write it into the milestone's own description (same mechanism and
+   same sign-off as `cut-release`'s step 5) — `milestone-release.yml`
+   prepends it to the published notes the same way for a backport as for an
+   ordinary release.
 7. **Once the cherry-pick PR is reviewed, merge it** (same sign-off as any
    other PR merge), then present the milestone for confirmation the same as
    the `cut-release` skill's step 4 — closing it is what publishes this
