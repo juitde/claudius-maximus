@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -254,9 +255,16 @@ func effectiveProperty(cfg *Config, property string) (values []string, isDefault
 	if err != nil {
 		return nil, false
 	}
-	stored, _ := field.Interface().([]string)
-	if stored != nil {
-		return stored, false
+	switch field.Kind() {
+	case reflect.Slice:
+		// nil means unset; an empty list is a decision and stands.
+		if stored, _ := field.Interface().([]string); stored != nil {
+			return stored, false
+		}
+	case reflect.String:
+		if stored := field.String(); stored != "" {
+			return []string{stored}, false
+		}
 	}
 	if meta := propertyMeta[property]; meta.defaults != nil {
 		return meta.defaults(), true
@@ -268,6 +276,9 @@ func printConfigSchema(specs []PropertySpec) int {
 	for _, s := range specs {
 		fmt.Printf("%s  (%s)\n", s.Name, s.Type)
 		fmt.Printf("    %s\n", s.Description)
+		if len(s.Allowed) > 0 {
+			fmt.Printf("    one of: %s\n", strings.Join(s.Allowed, ", "))
+		}
 		if s.Note != "" {
 			fmt.Printf("    %s\n", s.Note)
 		}

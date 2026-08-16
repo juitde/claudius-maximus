@@ -34,6 +34,19 @@ const (
 	SpawnWorktree SpawnMode = "worktree"
 )
 
+// defaultSpawnMode is same-dir, matching claude's own default and, more to the
+// point, the only mode that works everywhere.
+//
+// A worktree contains only what is committed. Everything a project needs to
+// actually run but does not track — vendor directories, node_modules, .env
+// files, local database state — is absent, so a worktree session can read and
+// write code but not execute anything. It also requires a git repository,
+// which project discovery deliberately does not insist on.
+//
+// worktree earns its place when several sessions must work on one project at
+// once without colliding; that is a deliberate choice, not a default.
+const defaultSpawnMode = SpawnSameDir
+
 // Environment is one running `claude remote-control` process.
 //
 // The name follows what claude actually reports: a process is an *environment*

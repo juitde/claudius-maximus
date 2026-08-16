@@ -46,6 +46,20 @@ type Config struct {
 	// ** expansion — a pattern spelling out its levels has already said where
 	// to look.
 	PruneDirectories []string `json:"prune_directories"`
+
+	// SpawnMode is the --spawn value passed to claude remote-control.
+	//
+	// A scalar rather than a list, so it has two states instead of three:
+	// empty means unset and the default applies.
+	SpawnMode SpawnMode `json:"spawn_mode"`
+}
+
+// spawnMode returns the spawn mode this config actually uses.
+func (c *Config) spawnMode() SpawnMode {
+	if c.SpawnMode == "" {
+		return defaultSpawnMode
+	}
+	return c.SpawnMode
 }
 
 // markers returns the marker set this config actually uses.
@@ -181,9 +195,15 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		if name == "" {
 			continue
 		}
+		// Unset properties are left out entirely. For a list that means nil
+		// (an empty list is a decision, and must survive); for a scalar it
+		// means the zero value, which has no such second reading.
 		field := v.Field(i)
-		if field.Kind() == reflect.Slice && field.IsNil() {
-			continue // unset — leave the key out entirely
+		switch {
+		case field.Kind() == reflect.Slice && field.IsNil():
+			continue
+		case field.Kind() == reflect.String && field.String() == "":
+			continue
 		}
 		out[name] = field.Interface()
 	}

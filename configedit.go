@@ -34,6 +34,9 @@ type PropertySpec struct {
 	Type        string `json:"type"`
 	Description string `json:"description"`
 	Note        string `json:"note,omitempty"`
+	// Allowed enumerates the accepted values, for properties that take a fixed
+	// set. Empty means any value passing validation.
+	Allowed []string `json:"allowed,omitempty"`
 }
 
 // propertyMeta carries what reflection cannot infer. Every field of Config
@@ -45,8 +48,13 @@ var propertyMeta = map[string]struct {
 	validate    func(string) error
 	// defaults supplies the effective value when the property is unset, so
 	// that add and remove extend the defaults rather than silently discarding
-	// them. nil means an unset property is simply empty.
+	// them. nil means an unset property is simply empty. A scalar property
+	// returns its single default value here, so that everything reading
+	// effective values can treat both kinds alike.
 	defaults func() []string
+	// allowed enumerates the accepted values, for properties taking a fixed
+	// set. Reported by the schema so the choice is discoverable.
+	allowed []string
 }{
 	"project_globs": {
 		description: "Glob patterns naming directories that may hold projects. A leading ~/ expands to the home directory.",
@@ -63,6 +71,15 @@ var propertyMeta = map[string]struct {
 		note:        "Applies only to ** patterns. Unset restores the built-in defaults; an empty list disables pruning.",
 		validate:    validateDirectoryName,
 		defaults:    func() []string { return defaultPruneDirectories },
+	},
+	"spawn_mode": {
+		description: "How claude places the sessions it creates inside an environment.",
+		note: "same-dir shares the project directory; worktree gives each session its own git worktree, " +
+			"which needs a git repository and excludes anything not committed — vendor directories, .env files, " +
+			"local database state.",
+		validate: validateSpawnMode,
+		defaults: func() []string { return []string{string(defaultSpawnMode)} },
+		allowed:  []string{string(SpawnSameDir), string(SpawnWorktree)},
 	},
 }
 
@@ -83,6 +100,7 @@ func configSchema() []PropertySpec {
 			Type:        describeType(field.Type),
 			Description: meta.description,
 			Note:        meta.note,
+			Allowed:     meta.allowed,
 		})
 	}
 	return specs
@@ -97,10 +115,14 @@ func jsonFieldName(field reflect.StructField) string {
 }
 
 func describeType(t reflect.Type) string {
-	if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.String {
+	switch {
+	case t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.String:
 		return "string list"
+	case t.Kind() == reflect.String:
+		return "string"
+	default:
+		return t.Kind().String()
 	}
-	return t.Kind().String()
 }
 
 // applyConfigEdit mutates cfg in place. It validates everything before
@@ -116,16 +138,23 @@ func applyConfigEdit(cfg *Config, edit ConfigEdit) (notes []string, err error) {
 	}
 	meta := propertyMeta[edit.Property]
 
-	if field.Kind() != reflect.Slice || field.Type().Elem().Kind() != reflect.String {
-		return nil, fmt.Errorf("property %q is not a list and cannot be edited by this command", edit.Property)
-	}
-
 	if edit.Operation != ConfigOpUnset && meta.validate != nil {
 		for _, v := range edit.Values {
 			if err := meta.validate(v); err != nil {
 				return nil, fmt.Errorf("invalid value %q for %s: %w", v, edit.Property, err)
 			}
 		}
+	}
+
+	switch field.Kind() {
+	case reflect.String:
+		return nil, applyScalarEdit(field, edit)
+	case reflect.Slice:
+		if field.Type().Elem().Kind() != reflect.String {
+			return nil, fmt.Errorf("property %q has an unsupported type", edit.Property)
+		}
+	default:
+		return nil, fmt.Errorf("property %q has an unsupported type", edit.Property)
 	}
 
 	current := field.Interface().([]string)
@@ -186,6 +215,37 @@ func applyConfigEdit(cfg *Config, edit ConfigEdit) (notes []string, err error) {
 
 	default:
 		return nil, fmt.Errorf("unknown operation %q", edit.Operation)
+	}
+}
+
+// applyScalarEdit handles a property holding a single value.
+//
+// add and remove are rejected rather than quietly reinterpreted as set: a
+// scalar has nothing to append to, and pretending otherwise would make
+// "config add spawn_mode worktree" look like it did something different from
+// what it did.
+func applyScalarEdit(field reflect.Value, edit ConfigEdit) error {
+	switch edit.Operation {
+	case ConfigOpUnset:
+		if len(edit.Values) > 0 {
+			return fmt.Errorf("unset takes no values")
+		}
+		field.SetString("")
+		return nil
+
+	case ConfigOpSet:
+		if len(edit.Values) != 1 {
+			return fmt.Errorf("%s takes exactly one value; use unset to restore the default", edit.Property)
+		}
+		field.SetString(edit.Values[0])
+		return nil
+
+	case ConfigOpAdd, ConfigOpRemove:
+		return fmt.Errorf("%s holds a single value, so %s does not apply — use set or unset",
+			edit.Property, edit.Operation)
+
+	default:
+		return fmt.Errorf("unknown operation %q", edit.Operation)
 	}
 }
 
@@ -253,6 +313,15 @@ func validateMarkerValue(v string) error {
 		}
 	}
 	return nil
+}
+
+func validateSpawnMode(v string) error {
+	switch SpawnMode(v) {
+	case SpawnSameDir, SpawnWorktree:
+		return nil
+	default:
+		return fmt.Errorf("must be %s or %s", SpawnSameDir, SpawnWorktree)
+	}
 }
 
 // validateDirectoryName accepts a bare directory name. Prune entries are
