@@ -79,30 +79,56 @@ func (s *Service) EditConfig(edit ConfigEdit) (*ConfigEditResult, error) {
 	return &ConfigEditResult{Config: *cfg, Notes: notes}, nil
 }
 
-// RescanResult reports what a rescan found.
+// RescanResult reports what a rescan found and what it changed.
 type RescanResult struct {
 	Cache ProjectCache `json:"cache"`
+	// Added, Removed and Renamed describe the difference against the cache
+	// this rescan replaced.
+	Added     []Project        `json:"added,omitempty"`
+	Removed   []Project        `json:"removed,omitempty"`
+	Renamed   []RenamedProject `json:"renamed,omitempty"`
+	Unchanged int              `json:"unchanged"`
 	// Rejected lists directories a glob matched that did not qualify.
 	Rejected []RejectedDir `json:"rejected,omitempty"`
+	// Pruned counts, per directory name, how often ** recursion was stopped.
+	Pruned map[string]int `json:"pruned,omitempty"`
 	// Warnings describes configured patterns that could not be used. Never
 	// fatal, but always surfaced — see resolveProjects.
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// Changed reports whether the rescan altered the project list.
+func (r *RescanResult) Changed() bool {
+	return len(r.Added) > 0 || len(r.Removed) > 0 || len(r.Renamed) > 0
+}
+
 // Rescan expands the configured globs, assigns collision-free names and
 // replaces the cache.
+//
+// It is exactly Preflight plus a write. Sharing that path rather than
+// repeating it is what makes doctor's preview binding: the preview is not a
+// prediction of what a rescan would do, it is the same computation.
 func (s *Service) Rescan() (*RescanResult, error) {
-	scan, err := s.scan()
+	preflight, err := s.Preflight()
 	if err != nil {
 		return nil, err
 	}
 
-	cache := &ProjectCache{ScannedAt: time.Now(), Projects: scan.Projects}
+	cache := &ProjectCache{ScannedAt: time.Now(), Projects: preflight.Scan.Projects}
 	if err := saveProjectCache(s.cachePath, cache); err != nil {
 		return nil, fmt.Errorf("write cache: %w", err)
 	}
 
-	return &RescanResult{Cache: *cache, Rejected: scan.Rejected, Warnings: scan.Warnings}, nil
+	return &RescanResult{
+		Cache:     *cache,
+		Added:     preflight.Added,
+		Removed:   preflight.Removed,
+		Renamed:   preflight.Renamed,
+		Unchanged: preflight.Unchanged,
+		Rejected:  preflight.Scan.Rejected,
+		Pruned:    preflight.Scan.Pruned,
+		Warnings:  preflight.Scan.Warnings,
+	}, nil
 }
 
 // scan performs the discovery half of a rescan — everything except writing the
@@ -135,6 +161,8 @@ type Preflight struct {
 	Added   []Project        `json:"added,omitempty"`
 	Removed []Project        `json:"removed,omitempty"`
 	Renamed []RenamedProject `json:"renamed,omitempty"`
+	// Unchanged counts projects already cached under the same name.
+	Unchanged int `json:"unchanged"`
 	// CachedAt is the timestamp of the cache being compared against; zero if
 	// no rescan has run yet.
 	CachedAt time.Time `json:"cached_at"`
@@ -184,5 +212,8 @@ func (s *Service) Preflight() (*Preflight, error) {
 			out.Removed = append(out.Removed, p)
 		}
 	}
+
+	// A rename is a change, so it does not count as unchanged.
+	out.Unchanged = len(scan.Projects) - len(out.Added) - len(out.Renamed)
 	return out, nil
 }

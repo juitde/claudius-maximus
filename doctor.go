@@ -264,42 +264,11 @@ func printDoctorHuman(r *DoctorReport) {
 	printProjectGroup("would be added", p.Added)
 	printProjectGroup("would be removed", p.Removed)
 
-	if len(p.Renamed) > 0 {
-		width := 0
-		for _, r := range p.Renamed {
-			width = max(width, len(r.OldName))
-		}
-		fmt.Printf("\n  would be renamed:\n")
-		for _, r := range p.Renamed {
-			fmt.Printf("    %-*s -> %-*s  %s\n", width, r.OldName, width, r.NewName, shortenPath(r.Path))
-		}
-	}
+	printRenames(p.Renamed)
 
 	printRejections(summarizeRejections(p.Scan.Rejected))
 
-	if len(p.Scan.Pruned) > 0 {
-		names := make([]string, 0, len(p.Scan.Pruned))
-		for name := range p.Scan.Pruned {
-			names = append(names, name)
-		}
-		// Most-pruned first: that is the entry doing the real work, and the
-		// one to look at if a project is unexpectedly missing.
-		sort.Slice(names, func(i, j int) bool {
-			if p.Scan.Pruned[names[i]] != p.Scan.Pruned[names[j]] {
-				return p.Scan.Pruned[names[i]] > p.Scan.Pruned[names[j]]
-			}
-			return names[i] < names[j]
-		})
-
-		total := 0
-		parts := make([]string, len(names))
-		for i, name := range names {
-			total += p.Scan.Pruned[name]
-			parts[i] = fmt.Sprintf("%s (%d)", name, p.Scan.Pruned[name])
-		}
-		fmt.Printf("\n  not descended into (%s):\n    %s\n",
-			plural(total, "directory", "directories"), strings.Join(parts, ", "))
-	}
+	printPruned(p.Scan.Pruned)
 
 	if len(p.Scan.Warnings) > 0 {
 		fmt.Printf("\n  warnings:\n")

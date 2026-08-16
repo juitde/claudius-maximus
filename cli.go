@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Exit codes.
@@ -28,9 +29,9 @@ func runCLI(svc *Service, args []string) int {
 		fmt.Println(appName, version)
 		return exitOK
 	case "list-projects":
-		return cliListProjects(svc)
+		return cliListProjects(svc, args[1:])
 	case "rescan":
-		return cliRescan(svc)
+		return cliRescan(svc, args[1:])
 	case "config":
 		return cliConfig(svc, args[1:])
 	case "doctor":
@@ -61,27 +62,61 @@ Environment:
 		appName, version, appName, envHome)
 }
 
-func cliListProjects(svc *Service) int {
+func cliListProjects(svc *Service, args []string) int {
+	mode, ok := parseOutputMode("list-projects", args)
+	if !ok {
+		return exitUsage
+	}
+
 	cache, err := svc.ListProjects()
 	if err != nil {
 		return fail(err)
 	}
-	// The hint goes to stderr so that stdout stays parseable JSON.
-	if len(cache.Projects) == 0 {
-		fmt.Fprintf(os.Stderr, "note: project cache is empty — run '%s rescan'\n", appName)
+	if mode == outputJSON {
+		return printJSON(cache)
 	}
-	return printJSON(cache)
+
+	if len(cache.Projects) == 0 {
+		fmt.Printf("No projects cached. Run '%s rescan'.\n", appName)
+		return exitOK
+	}
+	fmt.Printf("%s, scanned %s\n\n", plural(len(cache.Projects), "project"), humanizeSince(cache.ScannedAt))
+	printProjectList(cache.Projects, "  ")
+	return exitOK
 }
 
-func cliRescan(svc *Service) int {
+func cliRescan(svc *Service, args []string) int {
+	mode, ok := parseOutputMode("rescan", args)
+	if !ok {
+		return exitUsage
+	}
+
 	result, err := svc.Rescan()
 	if err != nil {
 		return fail(err)
 	}
+	if mode == outputJSON {
+		return printJSON(result)
+	}
+
+	fmt.Println(describeChanges(len(result.Added), len(result.Removed), len(result.Renamed), result.Unchanged))
+
+	// The default is exactly that one line. Which projects changed is a real
+	// question, but it is the second one, and answering it unprompted turns a
+	// routine rescan back into a wall of output — on a first run every project
+	// is an addition.
+	if mode == outputVerbose {
+		printProjectGroup("added", result.Added)
+		printProjectGroup("removed", result.Removed)
+		printRenames(result.Renamed)
+		printRejections(summarizeRejections(result.Rejected))
+		printPruned(result.Pruned)
+	}
+
 	for _, w := range result.Warnings {
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
-	return printJSON(result)
+	return exitOK
 }
 
 func cliDoctor(svc *Service, args []string) int {
@@ -117,25 +152,39 @@ func cliConfig(svc *Service, args []string) int {
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "show":
+		mode, ok := parseOutputMode("config show", rest)
+		if !ok {
+			return exitUsage
+		}
 		cfg, err := svc.ShowConfig()
 		if err != nil {
 			return fail(err)
 		}
-		return printJSON(cfg)
+		if mode == outputJSON {
+			return printJSON(cfg)
+		}
+		printConfigHuman(cfg, mode)
+		return exitOK
 
 	case "schema":
 		return printConfigSchema(svc.ConfigSchema())
 
 	case "set", "add", "remove", "unset":
-		if len(rest) == 0 {
+		// Flags are stripped before the property and values, so that
+		// "config add project_globs '~/dev/*' --json" works either way round.
+		mode, operands, ok := splitOutputFlags(sub, rest)
+		if !ok {
+			return exitUsage
+		}
+		if len(operands) == 0 {
 			fmt.Fprintf(os.Stderr, "error: %s requires a property name\n", sub)
 			printConfigUsage()
 			return exitUsage
 		}
 		result, err := svc.EditConfig(ConfigEdit{
 			Operation: ConfigOp(sub),
-			Property:  rest[0],
-			Values:    rest[1:],
+			Property:  operands[0],
+			Values:    operands[1:],
 		})
 		if err != nil {
 			return fail(err)
@@ -143,8 +192,12 @@ func cliConfig(svc *Service, args []string) int {
 		for _, n := range result.Notes {
 			fmt.Fprintln(os.Stderr, "note:", n)
 		}
-		fmt.Fprintf(os.Stderr, "config updated — run '%s rescan' to apply it\n", appName)
-		return printJSON(result.Config)
+		if mode == outputJSON {
+			return printJSON(result.Config)
+		}
+		printConfigHuman(&result.Config, mode)
+		fmt.Printf("\nRun '%s rescan' to apply.\n", appName)
+		return exitOK
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown config subcommand: %s\n", sub)
@@ -168,6 +221,48 @@ the built-in markers.
 `, appName)
 }
 
+// printConfigHuman shows each property's effective value, marking which come
+// from the built-in defaults — information the stored file cannot give, since
+// an unset property is simply absent from it.
+func printConfigHuman(cfg *Config, mode outputMode) {
+	specs := configSchema()
+	width := columnWidth(specs, func(s PropertySpec) string { return s.Name })
+
+	for _, spec := range specs {
+		values, isDefault := effectiveProperty(cfg, spec.Name)
+
+		origin := ""
+		if isDefault {
+			origin = "(default) "
+		}
+		rendered := describeList(values)
+		if mode == outputVerbose {
+			rendered = strings.Join(values, ", ")
+			if len(values) == 0 {
+				rendered = "(empty)"
+			}
+		}
+		fmt.Printf("%-*s  %s%s\n", width, spec.Name, origin, rendered)
+	}
+}
+
+// effectiveProperty returns the values in force for a property and whether
+// they come from the defaults rather than the configuration.
+func effectiveProperty(cfg *Config, property string) (values []string, isDefault bool) {
+	field, err := configField(cfg, property)
+	if err != nil {
+		return nil, false
+	}
+	stored, _ := field.Interface().([]string)
+	if stored != nil {
+		return stored, false
+	}
+	if meta := propertyMeta[property]; meta.defaults != nil {
+		return meta.defaults(), true
+	}
+	return nil, false
+}
+
 func printConfigSchema(specs []PropertySpec) int {
 	for _, s := range specs {
 		fmt.Printf("%s  (%s)\n", s.Name, s.Type)
@@ -185,6 +280,47 @@ func newFlagSet(name string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	return fs
+}
+
+// parseOutputMode handles the --json / --verbose pair that every reporting
+// command accepts, so the three modes mean the same thing everywhere.
+func parseOutputMode(command string, args []string) (outputMode, bool) {
+	fs := newFlagSet(command)
+	asJSON := fs.Bool("json", false, "print the full result as JSON")
+	verbose := fs.Bool("verbose", false, "print every detail rather than a summary")
+	if err := fs.Parse(args); err != nil {
+		return outputSummary, false
+	}
+	if *asJSON && *verbose {
+		fmt.Fprintln(os.Stderr, "error: --json and --verbose cannot be combined; --json is always complete")
+		return outputSummary, false
+	}
+
+	switch {
+	case *asJSON:
+		return outputJSON, true
+	case *verbose:
+		return outputVerbose, true
+	default:
+		return outputSummary, true
+	}
+}
+
+// splitOutputFlags separates the output flags from positional operands, so a
+// command taking arbitrary values can still accept --json anywhere. Go's flag
+// package stops at the first non-flag argument, which would otherwise make
+// flag position significant for no reason the user could guess.
+func splitOutputFlags(command string, args []string) (outputMode, []string, bool) {
+	var flags, operands []string
+	for _, a := range args {
+		if a == "--json" || a == "-json" || a == "--verbose" || a == "-verbose" {
+			flags = append(flags, a)
+			continue
+		}
+		operands = append(operands, a)
+	}
+	mode, ok := parseOutputMode(command, flags)
+	return mode, operands, ok
 }
 
 func fail(err error) int {

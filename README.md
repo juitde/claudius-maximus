@@ -39,6 +39,20 @@ claudius-maximus list-projects    # print the cached list
 claudius-maximus doctor           # check the setup, preview the next rescan
 ```
 
+`rescan` answers in a single line, naming only the categories that happened:
+
+```
+$ claudius-maximus rescan
+2 projects added, 1 project removed, 40 projects unmodified
+
+$ claudius-maximus rescan
+43 projects unmodified
+```
+
+Every reporting command takes `--verbose` for the full detail and `--json` for
+the complete machine-readable result. The default is the summary, because that
+is what a person asking "did that work?" needs.
+
 ### Checking the setup
 
 `doctor` reports on the configuration and previews what a `rescan` would do —
