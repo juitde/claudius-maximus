@@ -65,8 +65,27 @@ This keeps scratch directories out of a broad glob like `~/dev/*` — which
 matters for more than tidiness, since every extra entry is another chance for a
 name collision, and collisions make names longer for whoever collides.
 
-Markers may be literal names or glob patterns. Override them with
-`project_markers`:
+Markers may be literal names or glob patterns. Edit them with `config`:
+
+```bash
+claudius-maximus config schema                      # what can be set, and what it means
+claudius-maximus config add project_markers Justfile
+claudius-maximus config remove project_markers Makefile
+claudius-maximus config set project_markers         # no values: turn filtering off
+claudius-maximus config unset project_markers       # back to the built-in defaults
+```
+
+Values are checked against the schema before anything is written — an unknown
+property, a malformed glob or a marker containing a path separator is rejected
+with the config left untouched.
+
+Note the difference between the last two. `set` with no values writes an empty
+list, meaning "accept every matched directory". `unset` removes the property so
+the built-in defaults apply again. And because `add` and `remove` operate on
+what is currently in force, adding one marker to an unset property writes out
+the full default set first — the command says so when it happens.
+
+Or edit `config.json` by hand:
 
 ```jsonc
 {

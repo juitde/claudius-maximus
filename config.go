@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
@@ -30,7 +32,12 @@ type Config struct {
 	// runs claude in the directory, and claude runs anywhere. Someone whose
 	// globs are already precise should be able to say so instead of hunting
 	// for a marker that makes their project visible.
-	ProjectMarkers []string `json:"project_markers,omitempty"`
+	//
+	// Note the absent `omitempty`: it would erase exactly the distinction this
+	// field depends on, because encoding/json treats an empty slice as empty
+	// regardless of whether it is nil. saveConfig drops unset properties
+	// itself, which can tell the two apart.
+	ProjectMarkers []string `json:"project_markers"`
 }
 
 // markers returns the marker set this config actually uses.
@@ -122,11 +129,57 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Unknown keys are rejected rather than ignored. A misspelled property
+	// that silently does nothing is the same failure mode as a silently
+	// skipped glob: the user sees no effect and gets no explanation.
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w (valid properties: %s)",
+			path, err, strings.Join(configPropertyNames(), ", "))
 	}
 	return &cfg, nil
+}
+
+// MarshalJSON writes the configuration with unset properties left out
+// entirely.
+//
+// The struct alone cannot express "absent": encoding/json renders a nil slice
+// as null, while `omitempty` collapses an explicitly empty list into the same
+// absence. Either would destroy the three-state semantics of project_markers
+// on the next read. Building a map sidesteps both, and keeps the stored file
+// and the printed output identical — an unset property should not appear as
+// null in one place and vanish in the other.
+//
+// Map keys marshal in sorted order, so the file is stable across writes.
+func (c Config) MarshalJSON() ([]byte, error) {
+	v := reflect.ValueOf(c)
+	t := v.Type()
+
+	out := map[string]any{}
+	for i := range t.NumField() {
+		name := jsonFieldName(t.Field(i))
+		if name == "" {
+			continue
+		}
+		field := v.Field(i)
+		if field.Kind() == reflect.Slice && field.IsNil() {
+			continue // unset — leave the key out entirely
+		}
+		out[name] = field.Interface()
+	}
+	return json.Marshal(out)
+}
+
+func saveConfig(path string, cfg *Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(path, append(data, '\n'), 0o600)
 }
 
 // resolveProjects expands every configured glob and keeps the directories that

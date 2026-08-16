@@ -35,6 +35,50 @@ func (s *Service) ListProjects() (*ProjectCache, error) {
 	return loadProjectCache(s.cachePath)
 }
 
+// --- configuration ---
+
+// ShowConfig returns the configuration as stored.
+func (s *Service) ShowConfig() (*Config, error) {
+	return loadConfig(s.configPath)
+}
+
+// ConfigSchema lists the editable properties.
+func (s *Service) ConfigSchema() []PropertySpec {
+	return configSchema()
+}
+
+// ConfigEditResult reports the outcome of an edit.
+type ConfigEditResult struct {
+	Config Config `json:"config"`
+	// Notes covers adjustments the caller did not explicitly ask for, such as
+	// an unset property being seeded from its defaults or a duplicate value
+	// being skipped.
+	Notes []string `json:"notes,omitempty"`
+}
+
+// EditConfig applies one edit and persists the result.
+//
+// A single entry point for every operation rather than one method per verb:
+// validation, the read-modify-write cycle and the persistence rules then exist
+// exactly once, which is what keeps a later MCP tool from drifting away from
+// the CLI.
+func (s *Service) EditConfig(edit ConfigEdit) (*ConfigEditResult, error) {
+	cfg, err := loadConfig(s.configPath)
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	notes, err := applyConfigEdit(cfg, edit)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := saveConfig(s.configPath, cfg); err != nil {
+		return nil, fmt.Errorf("write config: %w", err)
+	}
+	return &ConfigEditResult{Config: *cfg, Notes: notes}, nil
+}
+
 // RescanResult reports what a rescan found.
 type RescanResult struct {
 	Cache ProjectCache `json:"cache"`

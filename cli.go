@@ -30,6 +30,8 @@ func runCLI(svc *Service, args []string) int {
 		return cliListProjects(svc)
 	case "rescan":
 		return cliRescan(svc)
+	case "config":
+		return cliConfig(svc, args[1:])
 	case "help", "-h", "--help":
 		printUsage()
 		return exitOK
@@ -44,16 +46,15 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `%s %s
 
 Usage:
-  %s rescan           Scan the configured globs and refresh the project cache
-  %s list-projects    Print the cached project list
-  %s version          Print the version and exit
+  %[3]s config <subcommand>  Inspect or edit the configuration ('config' for details)
+  %[3]s rescan               Scan the configured globs and refresh the project cache
+  %[3]s list-projects        Print the cached project list
+  %[3]s version              Print the version and exit
 
 Environment:
-  %-22s State directory (default: ~/.%s)
+  %-22[4]s State directory (default: ~/.%[3]s)
 `,
-		appName, version,
-		appName, appName, appName,
-		envHome, appName)
+		appName, version, appName, envHome)
 }
 
 func cliListProjects(svc *Service) int {
@@ -77,6 +78,77 @@ func cliRescan(svc *Service) int {
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 	return printJSON(result)
+}
+
+func cliConfig(svc *Service, args []string) int {
+	if len(args) == 0 {
+		printConfigUsage()
+		return exitUsage
+	}
+
+	sub, rest := args[0], args[1:]
+	switch sub {
+	case "show":
+		cfg, err := svc.ShowConfig()
+		if err != nil {
+			return fail(err)
+		}
+		return printJSON(cfg)
+
+	case "schema":
+		return printConfigSchema(svc.ConfigSchema())
+
+	case "set", "add", "remove", "unset":
+		if len(rest) == 0 {
+			fmt.Fprintf(os.Stderr, "error: %s requires a property name\n", sub)
+			printConfigUsage()
+			return exitUsage
+		}
+		result, err := svc.EditConfig(ConfigEdit{
+			Operation: ConfigOp(sub),
+			Property:  rest[0],
+			Values:    rest[1:],
+		})
+		if err != nil {
+			return fail(err)
+		}
+		for _, n := range result.Notes {
+			fmt.Fprintln(os.Stderr, "note:", n)
+		}
+		fmt.Fprintf(os.Stderr, "config updated — run '%s rescan' to apply it\n", appName)
+		return printJSON(result.Config)
+
+	default:
+		fmt.Fprintf(os.Stderr, "unknown config subcommand: %s\n", sub)
+		printConfigUsage()
+		return exitUsage
+	}
+}
+
+func printConfigUsage() {
+	fmt.Fprintf(os.Stderr, `Usage:
+  %[1]s config show                            Print the stored configuration
+  %[1]s config schema                          List the editable properties
+  %[1]s config set <property> [<value>...]     Replace a property's value
+  %[1]s config add <property> <value>...       Append values
+  %[1]s config remove <property> <value>...    Drop values
+  %[1]s config unset <property>                Delete a property, restoring its default
+
+'set' with no values writes an explicitly empty list, which is not the same as
+'unset': for project_markers, empty turns filtering off while unset restores
+the built-in markers.
+`, appName)
+}
+
+func printConfigSchema(specs []PropertySpec) int {
+	for _, s := range specs {
+		fmt.Printf("%s  (%s)\n", s.Name, s.Type)
+		fmt.Printf("    %s\n", s.Description)
+		if s.Note != "" {
+			fmt.Printf("    %s\n", s.Note)
+		}
+	}
+	return exitOK
 }
 
 // --- helpers ---
