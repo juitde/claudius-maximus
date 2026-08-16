@@ -65,6 +65,38 @@ func logFileFor(home, projectPath string) string {
 // tool can neither find nor stop.
 const stateSubdir = "state"
 
+// stateSchemaVersion is the format version of the files under state/.
+//
+// It exists now rather than when it is first needed, because the window for
+// introducing it closes at the first release. Whatever 1.0.0 writes becomes a
+// format that has to be migrated from forever, and a migration that must guess
+// which build wrote a file is a migration that breaks. Adding the marker costs
+// a line per file today; adding it after release costs a guess.
+//
+// Bump it only when a change cannot be absorbed by reading the old fields.
+// Adding an optional field does not qualify.
+const stateSchemaVersion = 1
+
+// checkSchemaVersion decides whether a state file can be read, and says what
+// to do when it cannot.
+//
+// The two directions fail differently and deserve different advice. A file
+// from a newer build means this binary is behind. A file from an older format
+// means the data has to be regenerated or discarded, and only the caller knows
+// which of those is cheap — hence remedy.
+func checkSchemaVersion(path string, found int, remedy string) error {
+	switch {
+	case found == stateSchemaVersion:
+		return nil
+	case found > stateSchemaVersion:
+		return fmt.Errorf("%s is in format %d, but this build of %s reads format %d — update %s",
+			path, found, appName, stateSchemaVersion, appName)
+	default:
+		return fmt.Errorf("%s is in format %d, which this build of %s no longer reads — %s",
+			path, found, appName, remedy)
+	}
+}
+
 func configFile(home string) string      { return filepath.Join(home, "config.json") }
 func stateFile(home, name string) string { return filepath.Join(home, stateSubdir, name) }
 func logsDir(home string) string         { return filepath.Join(home, stateSubdir, "logs") }

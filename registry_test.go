@@ -314,7 +314,7 @@ func TestRegistryNormalizesMissingMultiplexer(t *testing.T) {
 	// should see a real value rather than the empty string.
 	stateDir := t.TempDir()
 	mustWrite(t, stateFile(stateDir, "environments.json"),
-		`[{"project_path":"/home/u/dev/api","project_name":"api"}]`)
+		`{"schema_version":1,"environments":[{"project_path":"/home/u/dev/api","project_name":"api"}]}`)
 
 	got, err := newRegistry(stateDir).Get("/home/u/dev/api")
 	if err != nil {
@@ -328,7 +328,7 @@ func TestRegistryNormalizesMissingMultiplexer(t *testing.T) {
 func TestRegistryReportsMalformedFile(t *testing.T) {
 	stateDir := t.TempDir()
 	path := stateFile(stateDir, "environments.json")
-	mustWrite(t, path, `[{"project_path":`)
+	mustWrite(t, path, `{"environments":[{"project_path":`)
 
 	_, err := newRegistry(stateDir).List()
 	if err == nil {

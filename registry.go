@@ -98,6 +98,16 @@ func newRegistry(stateDir string) *Registry {
 	return &Registry{path: stateFile(stateDir, "environments.json")}
 }
 
+// registryFile is the on-disk shape.
+//
+// An object wrapping the list rather than a bare array, so there is somewhere
+// to put the format version. A top-level array has no room for one, which is
+// the reason to choose the shape before anything ships rather than after.
+type registryFile struct {
+	SchemaVersion int           `json:"schema_version"`
+	Environments  []Environment `json:"environments"`
+}
+
 func (r *Registry) load() ([]Environment, error) {
 	data, err := os.ReadFile(r.path)
 	if os.IsNotExist(err) {
@@ -107,12 +117,20 @@ func (r *Registry) load() ([]Environment, error) {
 		return nil, err
 	}
 
-	var environments []Environment
-	if err := json.Unmarshal(data, &environments); err != nil {
+	var file registryFile
+	if err := json.Unmarshal(data, &file); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", r.path, err)
 	}
-	normalize(environments)
-	return environments, nil
+	// Unlike the project cache, this cannot be regenerated: it is the only
+	// record of which process belongs to which project. Discarding it orphans
+	// whatever is running, so the advice says as much.
+	if err := checkSchemaVersion(r.path, file.SchemaVersion,
+		"stop any running environments, then delete the file"); err != nil {
+		return nil, err
+	}
+
+	normalize(file.Environments)
+	return file.Environments, nil
 }
 
 // normalize fills in fields that a hand-edited or older file may leave empty,
@@ -129,7 +147,10 @@ func normalize(environments []Environment) {
 }
 
 func (r *Registry) save(environments []Environment) error {
-	data, err := json.MarshalIndent(environments, "", "  ")
+	data, err := json.MarshalIndent(registryFile{
+		SchemaVersion: stateSchemaVersion,
+		Environments:  environments,
+	}, "", "  ")
 	if err != nil {
 		return err
 	}

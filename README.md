@@ -282,6 +282,9 @@ running.
   state/logs/               output of those processes
 ```
 
+Files under `state/` carry a `schema_version`. A file written by a newer build
+is refused with a message saying to update, rather than being misread.
+
 Everything under `state/` belongs to the tool. `projects.json` can be deleted
 at any time and a `rescan` rebuilds it; `environments.json` cannot, since it is
 the only record of which multiplexer session belongs to which process.
