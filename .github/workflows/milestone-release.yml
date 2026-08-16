@@ -108,7 +108,14 @@ jobs:
           # publishing (rather than inlined here) because it is also the
           # one a backport release triggers, and a build failure should
           # never be able to un-publish a release that already exists.
-          gh workflow run release.yml --ref "${{ steps.version.outputs.version }}"
+          #
+          # --ref main, not the tag: workflow_dispatch is only available on
+          # whichever version of release.yml already has that trigger, so
+          # dispatching against the tag itself would look for that trigger
+          # in the tag's own (possibly older) copy of the file. main always
+          # has the current version; the tag to actually build is passed
+          # explicitly instead.
+          gh workflow run release.yml --ref main -f tag="${{ steps.version.outputs.version }}"
 
       - name: Open a merge-up PR into main, if this came from a release branch
         if: steps.target.outputs.from_release_branch == 'true'
