@@ -326,13 +326,22 @@ construction regardless of how many milestones are open at once or whether
 any release has ever been published, and it needed replacing exactly one
 external dependency with about 150 lines of tested Python to get there.
 
-**The release trigger is `release: published`, not `push: tags`.** A tag
-created by publishing a GitHub Release — which is how every release here gets
-tagged, milestone-driven or by hand — is created using the workflow's own
-`GITHUB_TOKEN`. GitHub does not re-trigger workflows from events its own token
-caused, by design, to prevent infinite loops; `push: tags` is documented not to
-fire reliably for exactly this case. `release: published` is the trigger
-actually confirmed to work here.
+**The artifact build is triggered explicitly, not left to `release:
+published`.** The original design used `release: published` instead of
+`push: tags`, on the reasoning that a tag created by publishing a GitHub
+Release is created using the workflow's own `GITHUB_TOKEN`, and GitHub does
+not re-trigger workflows from events its own token caused, by design, to
+prevent infinite loops — documented clearly for `push: tags`, and assumed to
+make `release: published` the safe alternative. `v0.1.0` published with zero
+artifacts attached, because that same anti-recursion rule turned out not to
+be specific to `push: tags` at all: publishing a release via `GITHUB_TOKEN`
+doesn't reliably fire `release: published` either. `milestone-release.yml`
+now calls `gh workflow run release.yml --ref <tag>` immediately after
+publishing — an explicit dispatch request, not an implicit event, so it
+fires regardless of which token made it. `release: published` stays as a
+second trigger for the one case it does work: a human publishing a release
+by hand through the web UI, under their own account rather than
+`GITHUB_TOKEN`.
 
 **GoReleaser's build matrix matches CI's cross-compile job exactly — five
 targets, not the six its own defaults would produce.** `windows/arm64` is

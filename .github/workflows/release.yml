@@ -1,15 +1,23 @@
 name: Release
 
-# Fires on a published GitHub Release, not on a tag push. A release's tag is
-# usually created by publishing the release itself (via the web UI, or
-# milestone-release.yml's `gh release edit`/`gh release create`) — and a
-# tag created that way, using the workflow's own GITHUB_TOKEN, does not
-# reliably fire `push: tags` at all, by GitHub's own anti-recursion design for
-# GITHUB_TOKEN-driven events. `release: published` is the trigger actually
-# documented and confirmed to fire for this case.
+# release: published looked like the right trigger for exactly the same
+# reason push: tags was rejected: GitHub does not fire new workflow runs for
+# events caused by a workflow's own GITHUB_TOKEN, and every tag here is
+# created that way. It turns out that anti-recursion rule is not specific to
+# push: tags - publishing a release via GITHUB_TOKEN (milestone-release.yml's
+# `gh release edit --draft=false`) does not reliably fire release: published
+# either, discovered only because v0.1.0 actually published with zero
+# artifacts attached. The trigger stays, for the rare case a human publishes
+# a release by hand through the web UI (their own auth, not GITHUB_TOKEN,
+# so it fires normally) - but the automated path now triggers this
+# explicitly instead of relying on it: milestone-release.yml calls
+# `gh workflow run release.yml --ref <tag>` right after publishing, which
+# (unlike an implicit event) is a direct dispatch request and does fire
+# even when made with GITHUB_TOKEN.
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write

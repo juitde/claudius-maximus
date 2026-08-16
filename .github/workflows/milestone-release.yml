@@ -15,6 +15,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write # to explicitly dispatch release.yml, see the step below
 
 jobs:
   release:
@@ -93,9 +94,21 @@ jobs:
             echo "No draft found for $tag (milestone-draft.yml never ran for it - e.g. zero PRs were ever merged to it); using the freshly rendered notes directly."
             gh release create "$tag" --target "$ref" --title "$tag" --notes-file "$notes_file"
           fi
-        # release.yml then fires on this release's "published" event and
-        # attaches the GoReleaser artifacts — kept as a separate workflow
-        # because it is also the one a backport release triggers.
+      - name: Trigger the artifact build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # release.yml's own release: published trigger does not reliably
+          # fire here: publishing above used this same GITHUB_TOKEN, and
+          # GitHub's anti-recursion rule suppresses events caused by a
+          # workflow's own token - discovered because v0.1.0 actually
+          # published with zero artifacts attached. An explicit dispatch
+          # request is not an implicit event, so it fires regardless of
+          # which token made it. Kept as a separate workflow from
+          # publishing (rather than inlined here) because it is also the
+          # one a backport release triggers, and a build failure should
+          # never be able to un-publish a release that already exists.
+          gh workflow run release.yml --ref "${{ steps.version.outputs.version }}"
 
       - name: Open a merge-up PR into main, if this came from a release branch
         if: steps.target.outputs.from_release_branch == 'true'
