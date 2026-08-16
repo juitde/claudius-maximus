@@ -58,14 +58,25 @@ Preflight scan (nothing written)
     infra    ~/dev/infra
 
   matched a glob but skipped:
-    ~/dev/notes      no project marker
-    ~/dev/.DS_Store  not a directory
+    ~/dev/notes       no project marker
+    ~/dev/old-stuff   no project marker (+4 below)
+    ~/dev/.DS_Store   not a directory
+
+  3 directories only hold other projects: ~/dev, ~/work, ~/work/acme
 ```
 
-The last section is the one to read when a project is missing: it lists every
-directory a glob matched that did not qualify, and why. `--json` prints the
-same report for scripting. Only a hard failure exits non-zero — warnings
-describe things you may well have chosen on purpose.
+The skipped list is what to read when a project is missing. Two kinds of noise
+are kept out of it so the remainder is worth reading:
+
+- A directory holding discovered projects is not itself a project, and being
+  skipped is correct for it. Those are counted on one line instead of listed.
+- Once a directory is skipped, everything below it is skipped too. Only the top
+  of such a chain is shown, with the rest as `+N below`.
+
+`--json` is unabridged — every skipped directory appears with its reason, plus
+`contains_projects` and `covered_by` so a script can regroup differently. Only
+a hard failure exits non-zero; warnings describe things you may well have
+chosen on purpose.
 
 ### Recursive patterns
 

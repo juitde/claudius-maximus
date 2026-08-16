@@ -275,16 +275,7 @@ func printDoctorHuman(r *DoctorReport) {
 		}
 	}
 
-	if len(p.Scan.Rejected) > 0 {
-		fmt.Printf("\n  matched a glob but skipped:\n")
-		width := 0
-		for _, d := range p.Scan.Rejected {
-			width = max(width, len(shortenPath(d.Path)))
-		}
-		for _, d := range p.Scan.Rejected {
-			fmt.Printf("    %-*s  %s\n", width, shortenPath(d.Path), d.Reason)
-		}
-	}
+	printRejections(summarizeRejections(p.Scan.Rejected))
 
 	if len(p.Scan.Pruned) > 0 {
 		names := make([]string, 0, len(p.Scan.Pruned))
@@ -315,6 +306,89 @@ func printDoctorHuman(r *DoctorReport) {
 		for _, w := range p.Scan.Warnings {
 			fmt.Printf("    %s\n", w)
 		}
+	}
+}
+
+// skippedEntry is one directory worth reporting, together with the number of
+// directories below it that the same explanation covers.
+type skippedEntry struct {
+	Dir         RejectedDir
+	HiddenBelow int
+}
+
+// rejectionSummary splits the rejected directories into the part a user needs
+// to read and the part that only confirms the tool is working.
+type rejectionSummary struct {
+	// Skipped holds directories that qualified for nothing and hold nothing:
+	// the actual answer to "why is my project missing?".
+	Skipped []skippedEntry
+	// Containers hold discovered projects. Being skipped is correct for them —
+	// a directory full of repositories is not itself a repository — so they
+	// are summarised rather than listed as if something went wrong.
+	Containers []RejectedDir
+}
+
+func summarizeRejections(rejected []RejectedDir) rejectionSummary {
+	var summary rejectionSummary
+
+	for _, d := range rejected {
+		switch {
+		case d.ContainsProjects > 0:
+			summary.Containers = append(summary.Containers, d)
+		case d.CoveredBy != "":
+			// An ancestor already says this; counted against it below.
+		default:
+			summary.Skipped = append(summary.Skipped, skippedEntry{Dir: d})
+		}
+	}
+
+	for i := range summary.Skipped {
+		for _, d := range rejected {
+			if d.CoveredBy != "" && isAncestorDir(summary.Skipped[i].Dir.Path, d.Path) {
+				summary.Skipped[i].HiddenBelow++
+			}
+		}
+	}
+
+	// Biggest containers first: those are the ones worth recognising in a
+	// glance, and the tail is elided anyway.
+	sort.SliceStable(summary.Containers, func(i, j int) bool {
+		return summary.Containers[i].ContainsProjects > summary.Containers[j].ContainsProjects
+	})
+	return summary
+}
+
+// containerNamesShown caps how many container names the one-line summary
+// spells out before eliding the rest.
+const containerNamesShown = 4
+
+func printRejections(summary rejectionSummary) {
+	if len(summary.Skipped) > 0 {
+		width := 0
+		for _, e := range summary.Skipped {
+			width = max(width, len(shortenPath(e.Dir.Path)))
+		}
+		fmt.Printf("\n  matched a glob but skipped:\n")
+		for _, e := range summary.Skipped {
+			fmt.Printf("    %-*s  %s", width, shortenPath(e.Dir.Path), e.Dir.Reason)
+			if e.HiddenBelow > 0 {
+				fmt.Printf(" (+%d below)", e.HiddenBelow)
+			}
+			fmt.Println()
+		}
+	}
+
+	if len(summary.Containers) > 0 {
+		names := make([]string, 0, containerNamesShown)
+		for _, d := range summary.Containers[:min(len(summary.Containers), containerNamesShown)] {
+			names = append(names, shortenPath(d.Path))
+		}
+		if len(summary.Containers) > containerNamesShown {
+			names = append(names, "…")
+		}
+		fmt.Printf("\n  %s only hold other projects: %s\n",
+			plural(len(summary.Containers), "directory", "directories"),
+			strings.Join(names, ", "))
 	}
 }
 

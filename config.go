@@ -238,6 +238,18 @@ var defaultPruneDirectories = []string{
 type RejectedDir struct {
 	Path   string `json:"path"`
 	Reason string `json:"reason"`
+
+	// ContainsProjects counts discovered projects below this directory. A
+	// non-zero value means the directory is a container doing its job rather
+	// than something that failed to qualify — the two deserve different
+	// presentation even though the mechanism is identical.
+	ContainsProjects int `json:"contains_projects,omitempty"`
+
+	// CoveredBy names the nearest rejected ancestor that itself holds no
+	// projects. Such an ancestor already explains this entry: once a directory
+	// is skipped, everything below it is skipped too, and repeating that for
+	// every level says nothing new.
+	CoveredBy string `json:"covered_by,omitempty"`
 }
 
 // ScanResult is everything a scan of the configured globs learned.
@@ -303,11 +315,11 @@ func resolveProjects(cfg *Config) (*ScanResult, error) {
 			info, statErr := os.Stat(match)
 			switch {
 			case statErr != nil:
-				result.Rejected = append(result.Rejected, RejectedDir{abs, "not readable: " + statErr.Error()})
+				result.Rejected = append(result.Rejected, RejectedDir{Path: abs, Reason: "not readable: " + statErr.Error()})
 			case !info.IsDir():
-				result.Rejected = append(result.Rejected, RejectedDir{abs, "not a directory"})
+				result.Rejected = append(result.Rejected, RejectedDir{Path: abs, Reason: "not a directory"})
 			case !looksLikeProject(abs, markers):
-				result.Rejected = append(result.Rejected, RejectedDir{abs, "no project marker"})
+				result.Rejected = append(result.Rejected, RejectedDir{Path: abs, Reason: "no project marker"})
 			default:
 				matchedProject = true
 				result.Projects = append(result.Projects, Project{Path: abs})
@@ -320,7 +332,60 @@ func resolveProjects(cfg *Config) (*ScanResult, error) {
 				pattern, strings.Join(markers, ", ")))
 		}
 	}
+
+	annotateRejections(result)
 	return result, nil
+}
+
+// annotateRejections works out, for each rejected directory, whether it holds
+// projects and whether an already-rejected ancestor accounts for it.
+//
+// This runs once at the end because both questions need the complete project
+// list, which does not exist while the patterns are still being expanded.
+func annotateRejections(result *ScanResult) {
+	if len(result.Rejected) == 0 {
+		return
+	}
+
+	rejected := make(map[string]int, len(result.Rejected))
+	for i, r := range result.Rejected {
+		rejected[r.Path] = i
+	}
+
+	for i := range result.Rejected {
+		for _, p := range result.Projects {
+			if isAncestorDir(result.Rejected[i].Path, p.Path) {
+				result.Rejected[i].ContainsProjects++
+			}
+		}
+	}
+
+	for i := range result.Rejected {
+		// Only the nearest rejected ancestor has to be checked. A directory
+		// holding no projects cannot have a descendant that holds any, so a
+		// container is never below something barren — meaning if the nearest
+		// rejected ancestor is a container, no barren ancestor exists at all.
+		if j, ok := rejected[nearestRejectedAncestor(result.Rejected[i].Path, rejected)]; ok {
+			if result.Rejected[j].ContainsProjects == 0 {
+				result.Rejected[i].CoveredBy = result.Rejected[j].Path
+			}
+		}
+	}
+}
+
+func nearestRejectedAncestor(path string, rejected map[string]int) string {
+	for parent := filepath.Dir(path); ; parent = filepath.Dir(parent) {
+		if _, ok := rejected[parent]; ok {
+			return parent
+		}
+		if next := filepath.Dir(parent); next == parent {
+			return "" // reached the filesystem root
+		}
+	}
+}
+
+func isAncestorDir(ancestor, path string) bool {
+	return strings.HasPrefix(path, strings.TrimSuffix(ancestor, string(filepath.Separator))+string(filepath.Separator))
 }
 
 // looksLikeProject reports whether dir carries at least one of the given
