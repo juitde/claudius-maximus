@@ -11,13 +11,24 @@ name: Release
 # a release by hand through the web UI (their own auth, not GITHUB_TOKEN,
 # so it fires normally) - but the automated path now triggers this
 # explicitly instead of relying on it: milestone-release.yml calls
-# `gh workflow run release.yml --ref <tag>` right after publishing, which
-# (unlike an implicit event) is a direct dispatch request and does fire
-# even when made with GITHUB_TOKEN.
+# `gh workflow run release.yml --ref main -f tag=<tag>` right after
+# publishing, which (unlike an implicit event) is a direct dispatch request
+# and does fire even when made with GITHUB_TOKEN. --ref main, not the tag
+# itself: workflow_dispatch is only offered by GitHub for whichever version
+# of this file already has that trigger, so it has to be dispatched against
+# a ref that does - confirmed the hard way, dispatching against v0.1.0's own
+# (pre-fix) copy of this file failed outright ("Workflow does not have
+# 'workflow_dispatch' trigger"). The tag to actually build is instead passed
+# as an explicit input and checked out by name below, regardless of which
+# ref the run was dispatched against.
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach artifacts to"
+        required: true
 
 permissions:
   contents: write
@@ -26,9 +37,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Determine which tag to build
+        id: tag
+        run: |
+          tag="${{ github.event.inputs.tag }}"
+          echo "tag=${tag:-${{ github.event.release.tag_name }}}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # goreleaser needs full history for changelog/tag lookups
+          ref: ${{ steps.tag.outputs.tag }}
 
       - uses: actions/setup-go@v5
         with:
