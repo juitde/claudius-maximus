@@ -291,6 +291,80 @@ harmless — a user reads it, tries it, and notices immediately if it does not
 fit their setup. A wrong parser is not: it fails silently, in exactly the way
 this section exists to avoid repeating.
 
+## Release management
+
+[RELEASING.md](./RELEASING.md) is the process; this is why it looks the way
+it does.
+
+**Artifacts and notes are separate concerns, deliberately.** GoReleaser builds
+and attaches binaries; it never decides what a release says about itself.
+Release Drafter maintains the notes as PRs merge; it never builds anything.
+Neither could do the other's job as well as a tool built for it, and keeping
+them separate means a mistake in one cannot corrupt the other's output.
+
+**The release trigger is `release: published`, not `push: tags`.** A tag
+created by publishing a GitHub Release — which is how every release here gets
+tagged, milestone-driven or by hand — is created using the workflow's own
+`GITHUB_TOKEN`. GitHub does not re-trigger workflows from events its own token
+caused, by design, to prevent infinite loops; `push: tags` is documented not to
+fire reliably for exactly this case. `release: published` is the trigger
+actually confirmed to work here.
+
+**GoReleaser's build matrix matches CI's cross-compile job exactly — five
+targets, not the six its own defaults would produce.** `windows/arm64` is
+excluded on purpose: CI has never built or checked it, and shipping a platform
+nobody's own tooling has ever exercised would claim more than is true.
+
+**Milestone-driven releases with merge-up PRs are hand-built, not
+`laminas/automatic-releases`.** That tool does exactly this and is more
+battle-tested — but its signature mechanism is rotating the repository's
+default branch forward on every release, and as of this writing that exact
+mechanism has an open, unresolved bug (`laminas/automatic-releases#277`:
+switches the default branch to the wrong earlier version) alongside a related
+open issue about major-version branch handling (`#218`). Adopting a tool for
+the one thing it does that a simpler design does not need, while accepting a
+live bug in exactly that thing, was not a good trade.
+
+The model here is narrower on purpose: **`main` is never not `main`.** There is
+no "next line" to compute, because there is only ever one trunk. A release
+either comes from `main` (the ordinary case) or from a `release/vX.Y` branch a
+human created by hand, once, when a backport actually became necessary — never
+proactively, never by automation. `milestone-release.yml` only ever reads
+whether that branch exists; it does not create, rename, or switch anything.
+Deciding which of two open milestones a merge-up PR belongs to, when the
+branch topology never rotates, reduces to sorting open milestone titles as
+SemVer and taking the lowest — genuinely simple, not a corner cut. That
+ordering is the one piece of real logic in the whole design, which is why it
+is a separately tested Python script
+(`.github/scripts/next_milestone.py`) rather than inline shell.
+
+**A release-specific introduction is written by hand, directly on the draft,
+right before closing the milestone — not through a dedicated "finalize"
+step.** `milestone-release.yml`'s publish step only ever changes a release's
+tag, target and draft flag; it never touches the notes body. A hand-written
+intro therefore survives publishing intact, as long as no further PR merges
+(and therefore no further Release Drafter run) happen between writing it and
+closing the milestone. A dedicated workflow to protect against that narrow
+race was considered and dropped: the race is entirely within the releaser's
+own control — don't merge anything else in the few minutes between writing the
+intro and closing the milestone — and building automation to guard a window
+the human already controls would be solving a problem that mostly does not
+occur.
+
+**Backporting fixes forward before backporting them.** When a bug affects an
+older line and still exists on `main`, the fix lands on `main` first, and the
+backport is a cherry-pick of that exact commit — not an independent fix
+written twice. This makes the automatic merge-up PR (`release/vX.Y` back into
+`main`) usually a no-op by construction, which is the point: the merge-up PR
+is a safety net for the rarer case where something did not carry over cleanly,
+not the primary way a fix reaches `main`.
+
+**Merges to `main` must be real merge commits — squash and rebase are
+disabled.** Squashing a PR into one commit would erase exactly the property
+this project's history depends on: that each commit builds and passes tests on
+its own (see CONTRIBUTING.md). A PR reduced to a single commit on `main` also
+loses the trail back to which PR it came from, which the merge-up mechanism
+and any future PR-level release-note extraction both need.
 
 ## Deferred, and why
 
@@ -301,6 +375,13 @@ this section exists to avoid repeating.
 - **`self-update`.** Needs published release artifacts to exist first. Its
   migration half, however, constrains decisions now — which is why the state
   files are versioned already.
+- **Per-PR release notes.** The plan is a PR template section a contributor
+  fills in, extracted by a script into an extra line under that PR's entry in
+  the drafted notes — not yet built. Requires real merged PRs (this repo has
+  used none so far; everything up to this point was committed directly) to
+  verify the extraction against, the same reason install.go's `--force` path
+  is verified manually rather than in CI: building the harness to fake it
+  convincingly is a larger addition than the feature itself would be.
 
 ## How this is verified
 
