@@ -14,11 +14,11 @@ import (
 // test that passes only on one of the two is worse than no test.
 func stubClaude(t *testing.T) string {
 	t.Helper()
-	return fakeClaude(t, `case "$1" in
-  --version) echo "2.1.233 (Claude Code)" ;;
-  mcp)       echo "`+appName+`: /somewhere/`+appName+` mcp" ;;
-esac
-`)
+	stubEnv(t, map[string]string{
+		"CLAUDESTUB_VERSION":  "2.1.233 (Claude Code)",
+		"CLAUDESTUB_MCP_LIST": appName + ": /somewhere/" + appName + " mcp",
+	})
+	return claudeStub(t)
 }
 
 // healthyService is a service whose surroundings are all in order, so a test

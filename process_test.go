@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -224,25 +223,10 @@ func TestAwaitURL(t *testing.T) {
 
 // --- spawning a real process ---
 
-// fakeClaude writes a stub executable that mimics the parts of claude this
-// code depends on, so the spawn path can be exercised without an account.
-func fakeClaude(t *testing.T, script string) string {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the stub is a shell script")
-	}
-
-	path := filepath.Join(t.TempDir(), "claude")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
-		t.Fatalf("write stub: %v", err)
-	}
-	return path
-}
-
 func TestSpawnPlain(t *testing.T) {
 	t.Run("captures the URL and keeps running", func(t *testing.T) {
-		// Prints the banner, then stays alive like the real thing.
-		bin := fakeClaude(t, "printf '%s' \""+strings.ReplaceAll(realOutput, `"`, `\"`)+"\"\nsleep 30\n")
+		stubEnv(t, map[string]string{"CLAUDESTUB_BANNER": realOutput})
+		bin := claudeStub(t)
 
 		dir := t.TempDir()
 		logPath := filepath.Join(t.TempDir(), "rc.log")
@@ -270,10 +254,8 @@ func TestSpawnPlain(t *testing.T) {
 	t.Run("passes the spawn mode through", func(t *testing.T) {
 		// The stub echoes its arguments, so the assertion is on what claude
 		// would actually have received.
-		bin := fakeClaude(t, `echo "ARGS: $@" >&2
-printf 'https://claude.ai/code?environment=env_check\n'
-sleep 5
-`)
+		stubEnv(t, nil)
+		bin := claudeStub(t)
 		logPath := filepath.Join(t.TempDir(), "rc.log")
 
 		outcome, err := spawnPlain(spawnSpec{
@@ -298,13 +280,8 @@ sleep 5
 	})
 
 	t.Run("runs in the project directory", func(t *testing.T) {
-		// -P resolves symlinks, matching EvalSymlinks below. On macOS the
-		// temp directory lives under /var, which is a link to /private/var,
-		// so the logical and physical paths differ.
-		bin := fakeClaude(t, `pwd -P
-printf 'https://claude.ai/code?environment=env_check\n'
-sleep 5
-`)
+		stubEnv(t, nil)
+		bin := claudeStub(t)
 		dir := t.TempDir()
 		logPath := filepath.Join(t.TempDir(), "rc.log")
 
@@ -328,7 +305,11 @@ sleep 5
 	})
 
 	t.Run("a claude that exits is reported with its output", func(t *testing.T) {
-		bin := fakeClaude(t, "echo 'Credit balance too low' >&2\nexit 1\n")
+		stubEnv(t, map[string]string{
+			"CLAUDESTUB_STDERR":    "Credit balance too low",
+			"CLAUDESTUB_EXIT_CODE": "1",
+		})
+		bin := claudeStub(t)
 
 		_, err := spawnPlain(spawnSpec{
 			ProjectPath: t.TempDir(),

@@ -19,14 +19,6 @@ func waitForExit(pid int) bool {
 	return false
 }
 
-// liveClaude is a stub that prints a connected banner and then stays running,
-// like the real command does.
-func liveClaude(t *testing.T, environmentID string) string {
-	t.Helper()
-	return fakeClaude(t, "printf 'Continue coding in the Claude mobile app or "+
-		"https://claude.ai/code?environment="+environmentID+"\\n'\nsleep 60\n")
-}
-
 // environmentFixture builds a service over one discoverable project, with the
 // stub standing in for claude.
 func environmentFixture(t *testing.T, environmentID string) (svc *Service, projectPath string) {
@@ -36,7 +28,10 @@ func environmentFixture(t *testing.T, environmentID string) (svc *Service, proje
 	projectPath = filepath.Join(root, "api")
 	makeProject(t, projectPath, "go.mod")
 
-	t.Setenv(envClaudeBin, liveClaude(t, environmentID))
+	stubEnv(t, map[string]string{
+		"CLAUDESTUB_BANNER": "https://claude.ai/code?environment=" + environmentID + "\n",
+	})
+	t.Setenv(envClaudeBin, claudeStub(t))
 
 	svc, _ = newTestService(t, Config{ProjectGlobs: []string{filepath.Join(root, "*")}})
 	if _, err := svc.Rescan(); err != nil {

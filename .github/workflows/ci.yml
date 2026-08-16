@@ -10,13 +10,15 @@ permissions:
 
 jobs:
   test:
-    # Both platforms, because the tests spawn real processes and the parts
-    # that differ — process groups, signal delivery, symlinked temp paths —
-    # are exactly the parts a single runner would not exercise.
+    # All three, because the tests spawn real processes and the parts that
+    # differ — process groups, signal delivery, taskkill, symlinked temp paths
+    # — are exactly the parts a single runner would not exercise. The stand-in
+    # for claude is a Go program rather than a shell script precisely so that
+    # Windows runs these paths instead of skipping them.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +29,8 @@ jobs:
           check-latest: true
 
       - name: Check formatting
+        # Windows runners default to PowerShell; this step is written in shell.
+        shell: bash
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
