@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Both platforms, because the tests spawn real processes and the parts
+    # that differ — process groups, signal delivery, symlinked temp paths —
+    # are exactly the parts a single runner would not exercise.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      # The spawn path hands a child to a goroutine that reaps it, so the race
+      # detector earns its runtime here.
+      - name: Test
+        run: go test -race ./...
+
+  crosscompile:
+    # Build-tag mistakes in the platform-specific process handling only show up
+    # when the other platforms are actually built, which no test run does.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Build for every supported platform
+        run: |
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+            echo "==> $target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -o /dev/null .
+          done
