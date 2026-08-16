@@ -49,19 +49,43 @@ var directoryMarkers = map[string]bool{
 	".zed":          true,
 }
 
+// sampleNameFor turns a marker into a filename that the marker matches.
+//
+// A pattern marker needs a file that satisfies it, not a file named after it.
+// Creating the pattern verbatim happened to work on Unix — filepath.Match
+// accepts "*.sln" as a match for the literal name "*.sln" — while asserting
+// nothing about whether a real Solution.sln would be found. On Windows it does
+// not work at all, since an asterisk cannot appear in a filename, which is how
+// the accident came to light.
+func sampleNameFor(t *testing.T, marker string) string {
+	t.Helper()
+	if !isGlobPattern(marker) {
+		return marker
+	}
+
+	name := strings.NewReplacer("*", "sample", "?", "x").Replace(marker)
+	matches, err := filepath.Match(marker, name)
+	if err != nil || !matches {
+		t.Fatalf("cannot derive a filename matching %q (tried %q)", marker, name)
+	}
+	return name
+}
+
 func TestLooksLikeProject(t *testing.T) {
 	t.Run("every default marker is recognised", func(t *testing.T) {
 		for _, marker := range defaultProjectMarkers {
 			dir := t.TempDir()
+			name := sampleNameFor(t, marker)
+
 			// Some markers are directories in the wild and some are files.
 			// Both must be accepted, so create each in its natural form.
 			if directoryMarkers[marker] {
-				mustMkdir(t, filepath.Join(dir, marker))
+				mustMkdir(t, filepath.Join(dir, name))
 			} else {
-				mustWrite(t, filepath.Join(dir, marker), "")
+				mustWrite(t, filepath.Join(dir, name), "")
 			}
 			if !looksLikeProject(dir, defaultProjectMarkers) {
-				t.Errorf("marker %q not recognised", marker)
+				t.Errorf("marker %q not recognised via %q", marker, name)
 			}
 		}
 	})
