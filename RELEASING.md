@@ -114,11 +114,16 @@ picks a reasonable default, not a final answer.
 ## What the automation does and does not do
 
 - `milestone-draft.yml` runs on every push to `main` or to any `release/vX.Y`
-  branch. It finds the one open milestone targeting that branch, renders a
-  categorized changelog from exactly the PRs actually attached to that
-  milestone (`render_milestone_notes.py`), and keeps a draft release current
-  under that milestone's own title as its tag — from the very first PR, main
-  or backport alike. It never publishes anything on its own.
+  branch, and daily. It finds the one open milestone targeting that branch,
+  renders a categorized changelog from exactly the PRs actually attached to
+  that milestone (`render_milestone_notes.py`), and keeps a draft release
+  current under that milestone's own title as its tag — from the very first
+  PR, main or backport alike. It never publishes anything on its own. Every
+  run also deletes any draft whose title no longer matches an open
+  milestone, so there is never more than one draft for the next
+  main-targeted release and never more than one per already-published
+  line's next patch — a milestone deleted or renamed after its draft was
+  created cannot leave a stray one behind.
 - `milestone-release.yml` runs when a milestone closes. It validates the
   title, decides `main` vs. an existing `release/vX.Y` branch, publishes the
   matching draft (rendering it fresh instead, in the rare case no draft ever
