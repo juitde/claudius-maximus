@@ -58,6 +58,12 @@ var propertyMeta = map[string]struct {
 		validate:    validateMarkerValue,
 		defaults:    func() []string { return defaultProjectMarkers },
 	},
+	"prune_directories": {
+		description: "Directory names that ** recursion does not descend into, such as node_modules.",
+		note:        "Applies only to ** patterns. Unset restores the built-in defaults; an empty list disables pruning.",
+		validate:    validateDirectoryName,
+		defaults:    func() []string { return defaultPruneDirectories },
+	},
 }
 
 // configSchema lists the editable properties, derived from the Config struct.
@@ -245,6 +251,22 @@ func validateMarkerValue(v string) error {
 		if _, err := filepath.Match(v, ""); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validateDirectoryName accepts a bare directory name. Prune entries are
+// compared against a single path component, so a pattern or a path would never
+// match anything.
+func validateDirectoryName(v string) error {
+	if strings.TrimSpace(v) == "" {
+		return fmt.Errorf("must not be blank")
+	}
+	if strings.ContainsAny(v, `/\`) {
+		return fmt.Errorf("must be a single directory name, not a path")
+	}
+	if isGlobPattern(v) {
+		return fmt.Errorf("must be a literal directory name, not a pattern")
 	}
 	return nil
 }

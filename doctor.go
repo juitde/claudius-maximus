@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -61,9 +62,9 @@ func (s *Service) Doctor() *DoctorReport {
 		report.Checks = append(report.Checks,
 			checkGlobs(cfg),
 			checkMarkers(cfg),
+			checkPruning(cfg),
 		)
 	}
-
 	report.Checks = append(report.Checks, s.checkCache())
 
 	// A broken config makes the scan meaningless, so skip it rather than
@@ -159,6 +160,41 @@ func checkMarkers(cfg *Config) CheckResult {
 	}
 }
 
+func checkPruning(cfg *Config) CheckResult {
+	usesGlobstar := false
+	for _, g := range cfg.ProjectGlobs {
+		if strings.Contains(g, globstar) {
+			usesGlobstar = true
+			break
+		}
+	}
+	if !usesGlobstar {
+		return CheckResult{
+			Name: "prune directories", Status: StatusOK,
+			Detail: "not in use — no pattern contains " + globstar,
+		}
+	}
+
+	switch dirs := cfg.pruneDirectories(); {
+	case cfg.PruneDirectories == nil:
+		return CheckResult{
+			Name: "prune directories", Status: StatusOK,
+			Detail: fmt.Sprintf("built-in defaults (%d entries)", len(dirs)),
+		}
+	case len(dirs) == 0:
+		return CheckResult{
+			Name: "prune directories", Status: StatusWarn,
+			Detail:  "pruning disabled — " + globstar + " will descend into dependency and build trees",
+			FixHint: fmt.Sprintf("%s config unset prune_directories", appName),
+		}
+	default:
+		return CheckResult{
+			Name: "prune directories", Status: StatusOK,
+			Detail: fmt.Sprintf("custom: %s", strings.Join(dirs, ", ")),
+		}
+	}
+}
+
 func (s *Service) checkCache() CheckResult {
 	cache, err := s.ListProjects()
 	if err != nil {
@@ -250,6 +286,30 @@ func printDoctorHuman(r *DoctorReport) {
 		}
 	}
 
+	if len(p.Scan.Pruned) > 0 {
+		names := make([]string, 0, len(p.Scan.Pruned))
+		for name := range p.Scan.Pruned {
+			names = append(names, name)
+		}
+		// Most-pruned first: that is the entry doing the real work, and the
+		// one to look at if a project is unexpectedly missing.
+		sort.Slice(names, func(i, j int) bool {
+			if p.Scan.Pruned[names[i]] != p.Scan.Pruned[names[j]] {
+				return p.Scan.Pruned[names[i]] > p.Scan.Pruned[names[j]]
+			}
+			return names[i] < names[j]
+		})
+
+		total := 0
+		parts := make([]string, len(names))
+		for i, name := range names {
+			total += p.Scan.Pruned[name]
+			parts[i] = fmt.Sprintf("%s (%d)", name, p.Scan.Pruned[name])
+		}
+		fmt.Printf("\n  not descended into (%s):\n    %s\n",
+			plural(total, "directory", "directories"), strings.Join(parts, ", "))
+	}
+
 	if len(p.Scan.Warnings) > 0 {
 		fmt.Printf("\n  warnings:\n")
 		for _, w := range p.Scan.Warnings {
@@ -304,9 +364,15 @@ func humanizeSince(t time.Time) string {
 	}
 }
 
-func plural(n int, noun string) string {
+// plural renders a count with its noun. Irregular plurals are passed in
+// explicitly rather than derived: guessing English morphology from a suffix
+// gets "directories" right and "days" wrong.
+func plural(n int, singular string, pluralForm ...string) string {
 	if n == 1 {
-		return fmt.Sprintf("1 %s", noun)
+		return "1 " + singular
 	}
-	return fmt.Sprintf("%d %ss", n, noun)
+	if len(pluralForm) > 0 {
+		return fmt.Sprintf("%d %s", n, pluralForm[0])
+	}
+	return fmt.Sprintf("%d %ss", n, singular)
 }

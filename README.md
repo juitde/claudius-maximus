@@ -27,7 +27,7 @@ Point the tool at the directories that hold your projects:
 ```bash
 # ~/.claudius-maximus/config.json
 {
-  "project_globs": ["~/dev/*", "~/work/*/*"]
+  "project_globs": ["~/dev/*", "~/work/**/*"]
 }
 ```
 
@@ -46,7 +46,7 @@ without writing anything:
 
 ```
   ✓ project globs      1 pattern configured: ~/dev/*
-  ✓ project markers    built-in defaults (49 entries)
+  ✓ project markers    built-in defaults (58 entries)
   ✓ project cache      29 projects, scanned 5 minutes ago
   ! cache freshness    out of date — 2 to add, 1 to rename
 
@@ -67,6 +67,41 @@ directory a glob matched that did not qualify, and why. `--json` prints the
 same report for scripting. Only a hard failure exits non-zero — warnings
 describe things you may well have chosen on purpose.
 
+### Recursive patterns
+
+`**` matches any number of directory levels, so one pattern covers a tree of
+uneven depth:
+
+```jsonc
+{
+  "project_globs": ["~/Documents/Development/**/*"]
+}
+```
+
+Two rules keep that from walking your whole disk:
+
+**Recursion stops at a project.** Once a directory qualifies, its contents are
+not searched. A repository containing sub-packages with their own `go.mod` or
+`composer.json` is reported once, as itself — which is what "find my projects"
+means. Sub-packages are reachable by naming their level explicitly
+(`~/dev/*/services/*`) if you really want them separately.
+
+**Dependency and build trees are skipped.** `node_modules`, `vendor`, `target`,
+`build`, `.git` and friends are never descended into. The list is
+`prune_directories` and is editable like any other property:
+
+```bash
+claudius-maximus config remove prune_directories build   # if you have a project called build
+claudius-maximus config set prune_directories            # disable pruning entirely
+```
+
+Pruning applies only to `**`. A pattern that spells out its levels has already
+said where to look. `doctor` reports which prune entries actually fired, so an
+unexpectedly missing project is traceable.
+
+One `**` per pattern; a second one is rejected rather than quietly
+misinterpreted. Symlinked directories match but are not descended through.
+
 `rescan` keeps every project name as short as it can while staying unique —
 `api` stays `api` unless a second `api` shows up, at which point both grow a
 parent segment (`dev-api`, `client-a-api`). `list-projects` reads only the
@@ -75,8 +110,9 @@ cache and never scans, so every caller sees the same list until the next
 
 ### Which directories count as projects
 
-A matched directory needs at least one marker file. The defaults cover one
-canonical root file per ecosystem:
+A matched directory needs at least one marker. The defaults span three kinds
+of evidence — a build manifest, an environment definition, or the fact that
+someone opened the directory in an editor:
 
 | | |
 |---|---|
@@ -88,9 +124,21 @@ canonical root file per ecosystem:
 | Ruby, Elixir, Erlang | `Gemfile`, `*.gemspec`, `mix.exs`, `rebar.config` |
 | C/C++ and friends | `CMakeLists.txt`, `meson.build`, `configure.ac`, `Makefile`, `Package.swift`, `*.xcodeproj`, `build.zig`, `pubspec.yaml`, `stack.yaml`, `*.cabal` |
 | Infrastructure | `*.tf`, `.terraform.lock.hcl`, `terragrunt.hcl`, `ansible.cfg`, `Chart.yaml`, `kustomization.yaml`, `flake.nix` |
-| Containers | `Dockerfile`, `docker-compose.y[a]ml`, `compose.yaml` |
+| Containers, local envs | `Dockerfile`, `docker-compose.y[a]ml`, `compose.yaml`, `.ddev`, `.devcontainer` |
+| Editors and IDEs | `.idea`, `.vscode`, `.vs`, `.fleet`, `.zed`, `.project`, `*.sublime-project` |
 
-This keeps scratch directories out of a broad glob like `~/dev/*` — which
+That last row does more work than it looks like. Whole ecosystems have no
+manifest at all — plain PHP, shell tooling, a documentation tree — and there
+the editor directory is the only durable evidence that someone treats this as a
+project. It is also the most reliable signal there is, because it records an
+explicit human decision rather than an inferred convention.
+
+Some names appear both here and in `prune_directories`, which is not a
+contradiction: as a marker `.idea` means "the directory containing it is a
+project", as a prune entry it means "do not walk around inside it". Together
+they are exactly right.
+
+Filtering keeps scratch directories out of a broad glob like `~/dev/*` — which
 matters for more than tidiness, since every extra entry is another chance for a
 name collision, and collisions make names longer for whoever collides.
 

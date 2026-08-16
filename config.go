@@ -38,6 +38,14 @@ type Config struct {
 	// regardless of whether it is nil. saveConfig drops unset properties
 	// itself, which can tell the two apart.
 	ProjectMarkers []string `json:"project_markers"`
+
+	// PruneDirectories names directories that ** must not descend into.
+	//
+	// Same three states as ProjectMarkers: absent uses the defaults, a list
+	// replaces them, an empty list disables pruning. Pruning applies only to
+	// ** expansion — a pattern spelling out its levels has already said where
+	// to look.
+	PruneDirectories []string `json:"prune_directories"`
 }
 
 // markers returns the marker set this config actually uses.
@@ -46,6 +54,14 @@ func (c *Config) markers() []string {
 		return defaultProjectMarkers
 	}
 	return c.ProjectMarkers
+}
+
+// pruneDirectories returns the prune set this config actually uses.
+func (c *Config) pruneDirectories() []string {
+	if c.PruneDirectories == nil {
+		return defaultPruneDirectories
+	}
+	return c.PruneDirectories
 }
 
 // Project is a single discovered project directory.
@@ -182,6 +198,38 @@ func saveConfig(path string, cfg *Config) error {
 	return writeFileAtomic(path, append(data, '\n'), 0o600)
 }
 
+// defaultPruneDirectories are the directories a ** pattern does not descend
+// into. Nearly all of them are dependency or build output trees, which are
+// both enormous and never projects in their own right — walking them is the
+// difference between a scan that takes milliseconds and one that takes
+// minutes.
+//
+// The names that could plausibly also be a real project directory — build,
+// dist, target — are included because as build output they are far more
+// common. Anyone they get in the way of can drop them from the list, and
+// doctor reports which prune entries actually fired.
+//
+// Some entries here also appear in defaultProjectMarkers, which is not a
+// contradiction: the two lists answer different questions about the same name.
+// As a marker, .idea means "the directory containing this is a project". As a
+// prune entry, it means "do not walk around inside it". Both hold at once, and
+// together they are exactly right — an IDE-managed directory is found, and its
+// internals are not searched.
+var defaultPruneDirectories = []string{
+	// Version control internals
+	".git", ".hg", ".svn",
+
+	// Dependency trees
+	"node_modules", "vendor", "Pods", ".venv", "venv", "__pycache__",
+
+	// Build output and tool caches
+	"target", "build", "dist", "out", "DerivedData",
+	".gradle", ".terraform", ".next", ".nuxt", ".cache", ".tox",
+
+	// Editor state
+	".idea", ".vscode",
+}
+
 // RejectedDir is something a glob matched that did not become a project.
 //
 // Reporting these matters because the alternative is a project that quietly
@@ -196,7 +244,9 @@ type RejectedDir struct {
 type ScanResult struct {
 	Projects []Project     `json:"projects"`
 	Rejected []RejectedDir `json:"rejected,omitempty"`
-	Warnings []string      `json:"warnings,omitempty"`
+	// Pruned counts, per directory name, how often ** recursion was stopped.
+	Pruned   map[string]int `json:"pruned,omitempty"`
+	Warnings []string       `json:"warnings,omitempty"`
 }
 
 // resolveProjects expands every configured glob and keeps the directories that
@@ -214,15 +264,27 @@ func resolveProjects(cfg *Config) (*ScanResult, error) {
 
 	markers, warnings := validateMarkers(cfg.markers())
 	result := &ScanResult{Warnings: warnings}
+	pruneDirs := cfg.pruneDirectories()
 
 	seen := map[string]bool{}
 	for _, pattern := range cfg.ProjectGlobs {
 		expanded := expandHome(pattern, home)
-		matches, globErr := filepath.Glob(expanded)
+		// Recursion stops at anything that is already a project: nested
+		// sub-packages are not what "find my projects" means.
+		expansion, globErr := expandGlobPattern(expanded, pruneDirs, func(dir string) bool {
+			return looksLikeProject(dir, markers)
+		})
 		if globErr != nil {
 			result.Warnings = append(result.Warnings,
 				fmt.Sprintf("ignoring malformed pattern %q: %v", pattern, globErr))
 			continue
+		}
+		matches := expansion.Matches
+		for name, count := range expansion.Pruned {
+			if result.Pruned == nil {
+				result.Pruned = map[string]int{}
+			}
+			result.Pruned[name] += count
 		}
 		if len(matches) == 0 {
 			result.Warnings = append(result.Warnings,
