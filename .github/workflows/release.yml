@@ -1,0 +1,36 @@
+name: Release
+
+# Fires on a published GitHub Release, not on a tag push. A release's tag is
+# usually created by publishing the release itself (via the web UI, the
+# finalize-release workflow, or `gh release create` for a backport) — and a
+# tag created that way, using the workflow's own GITHUB_TOKEN, does not
+# reliably fire `push: tags` at all, by GitHub's own anti-recursion design for
+# GITHUB_TOKEN-driven events. `release: published` is the trigger actually
+# documented and confirmed to fire for this case.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # goreleaser needs full history for changelog/tag lookups
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

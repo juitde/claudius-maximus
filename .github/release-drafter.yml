@@ -1,0 +1,59 @@
+# Maintains one running draft release, updated on every push to main. The
+# draft itself is the answer to "is a release ready yet" — it exists,
+# visibly, as an unpublished GitHub Release that grows PR by PR; publishing it
+# (via the finalize-release workflow) is the deliberate "yes, now" moment.
+#
+# The template only ever holds the auto-generated PR list. header/footer are
+# static config, the same text every time — not a place to hand-write a
+# per-release summary, since Release Drafter recomputes and overwrites the
+# whole body on every run and would silently discard anything typed into the
+# draft directly.
+#
+# A release-specific introduction is instead added by hand, directly on the
+# draft, right before closing the milestone — see RELEASING.md. Publishing
+# (milestone-release.yml) only ever changes the draft's tag, target and draft
+# flag; it never touches the notes body, so a hand-written intro survives
+# publish intact, provided no further PR merges (and therefore no further
+# Release Drafter run) happen in between writing it and closing the
+# milestone.
+
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: "Breaking changes"
+    labels: [breaking]
+  - title: "Features"
+    labels: [enhancement]
+  - title: "Fixes"
+    labels: [bug]
+  - title: "Other"
+    labels: [documentation, dependencies, chore]
+
+exclude-labels:
+  - skip-changelog
+
+change-template: "- $TITLE (#$NUMBER)"
+change-title-escapes: '\<*_&'
+
+# $RESOLVED_VERSION is a starting suggestion, not the final word: the
+# finalize-release workflow always takes an explicit version input rather
+# than trusting this unconditionally. That matters most during the 0.x beta
+# phase, where a "breaking" label resolving to a major bump (1.0.0) would be
+# premature — the human decides the actual number every time; this only gives
+# them something to look at while deciding.
+version-resolver:
+  major:
+    labels: [breaking]
+  minor:
+    labels: [enhancement]
+  patch:
+    labels: [bug, documentation, dependencies, chore]
+  default: patch
+
+template: |
+  ## Changes
+
+  $CHANGES
+
+no-changes-template: "No changes."

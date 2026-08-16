@@ -1,0 +1,125 @@
+name: Milestone Release
+
+# A closed milestone is the "this release is ready" signal. Everything else
+# here follows from one deliberately narrow rule, chosen over adopting
+# laminas/automatic-releases wholesale: main never stops being main. There is
+# no branch rotation and no "next line" topology to compute — a release
+# either comes from main (the ordinary case) or from a pre-existing
+# release/vX.Y branch a human created by hand when a backport actually became
+# necessary (see RELEASING.md). This workflow only ever reads that branch; it
+# never creates, renames, or switches a default branch.
+on:
+  milestone:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate the milestone title as vMAJOR.MINOR.PATCH
+        id: version
+        run: |
+          title="${{ github.event.milestone.title }}"
+          if ! [[ "$title" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Milestone title '$title' is not a bare vMAJOR.MINOR.PATCH version; refusing to guess a release from it."
+            exit 1
+          fi
+          echo "version=$title" >> "$GITHUB_OUTPUT"
+          echo "line=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine the ref to release from
+        id: target
+        run: |
+          branch="release/v${{ steps.version.outputs.line }}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "ref=$branch" >> "$GITHUB_OUTPUT"
+            echo "from_release_branch=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+            echo "from_release_branch=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag and publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.version.outputs.version }}"
+          ref="${{ steps.target.outputs.ref }}"
+
+          # Found by draft status, not by guessing Release Drafter's own tag
+          # name in advance: Release Drafter suggests a version from labels,
+          # the milestone is what the human actually decided, and the two are
+          # not guaranteed to agree — especially during the 0.x phase, where
+          # $RESOLVED_VERSION's major-bump-on-"breaking" default is exactly
+          # the kind of guess a human is expected to override (see
+          # release-drafter.yml). Matching on draft status and then renaming
+          # the tag on publish keeps Release Drafter's accumulated PR notes
+          # regardless of which version it originally guessed.
+          draft_tag=$(gh release list --json isDraft,tagName \
+            --jq 'map(select(.isDraft))[0].tagName // empty')
+
+          if [ -n "$draft_tag" ]; then
+            echo "Publishing the existing draft ($draft_tag) as $tag"
+            gh release edit "$draft_tag" --tag "$tag" --target "$ref" --draft=false
+          else
+            echo "No draft found; creating $tag directly with generated notes"
+            # No trailing ^: at this point ref has not been tagged with the
+            # new version yet, so the nearest reachable tag already is the
+            # correct "previous release" — walking one commit further back
+            # would risk skipping past it.
+            prev_tag=$(git describe --tags --abbrev=0 "$ref" 2>/dev/null || echo '')
+            if [ -n "$prev_tag" ]; then
+              gh release create "$tag" --target "$ref" --title "$tag" --generate-notes --notes-start-tag "$prev_tag"
+            else
+              gh release create "$tag" --target "$ref" --title "$tag" --generate-notes
+            fi
+          fi
+        # release.yml then fires on this release's "published" event and
+        # attaches the GoReleaser artifacts — kept as a separate workflow
+        # because it is also the one a backport release triggers.
+
+      - name: Open a merge-up PR into main, if this came from a release branch
+        if: steps.target.outputs.from_release_branch == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="${{ steps.target.outputs.ref }}"
+          tag="${{ steps.version.outputs.version }}"
+          merge_up="merge-up/${tag}"
+
+          git fetch origin main "$branch"
+          git switch -c "$merge_up" "origin/$branch"
+          git push origin "$merge_up"
+
+          # $owner/$repo below are GraphQL's own variable syntax, resolved
+          # server-side via the -f arguments; they are not meant to expand as
+          # shell variables. Double-quoting this string would make bash try
+          # to expand them instead (to nothing, since no such shell variables
+          # exist) rather than leaving them for GraphQL to resolve.
+          # shellcheck disable=SC2016
+          open_titles=$(gh api graphql -f query='
+            query($owner:String!,$repo:String!) {
+              repository(owner:$owner, name:$repo) {
+                milestones(states:OPEN, first:100) { nodes { title } }
+              }
+            }' -f owner="${{ github.repository_owner }}" -f repo="${{ github.event.repository.name }}" \
+            --jq '.data.repository.milestones.nodes[].title')
+
+          next=$(printf '%s\n' "$open_titles" | python3 .github/scripts/next_milestone.py || true)
+
+          pr_args=(--base main --head "$merge_up" --title "Merge up: $tag into main"
+            --body "Propagates the $tag backport (branch \`$branch\`) forward into \`main\`. If this PR shows no changes, the fix was already present in \`main\` before the backport — expected when the fix was made forward-first and then cherry-picked onto the release branch, per RELEASING.md.")
+
+          if [ -n "$next" ]; then
+            gh pr create "${pr_args[@]}" --milestone "$next"
+          else
+            gh pr create "${pr_args[@]}"
+          fi

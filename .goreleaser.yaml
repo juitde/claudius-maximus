@@ -1,0 +1,48 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    # windows/arm64 is excluded: CI's cross-compile job (ci.yml) validates
+    # exactly five targets, and this list is meant to match what has actually
+    # been built and checked, not GoReleaser's full default matrix.
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    binary: "{{ .ProjectName }}"
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # Matches the repo's own naming: claudius-maximus_<os>_<arch>, no version
+    # in the archive name itself — the version already lives in the release
+    # it is attached to, and in checksums.txt alongside it.
+    name_template: >-
+      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: "checksums.txt"
+
+# Release Drafter creates the GitHub Release itself (see
+# .github/release-drafter.yml) with its own notes already in place before
+# this ever runs. keep-existing is GoReleaser's default, made explicit here so
+# it is a decision on record rather than an accident of not having typed
+# anything: attach the built artifacts to whatever release already exists for
+# this tag, and never touch its body.
+release:
+  mode: keep-existing
+
+# No source archive: this is a CLI tool people install a binary for, not a
+# library anyone builds from a release tarball. `go install` and cloning
+# already cover the source case without GoReleaser producing a redundant copy.
+source:
+  enabled: false
