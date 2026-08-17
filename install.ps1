@@ -167,16 +167,23 @@ try {
     # actions with two different blast radii (the second mutates the caller's
     # Claude Code configuration and requires `claude` on PATH) - opt-in via
     # -Postinstall, not automatic. See issue #14.
+    #
+    # Suggested commands use the & call operator: unlike a POSIX shell, a
+    # quoted path on its own is not directly invocable in PowerShell - typing
+    # "$installPath" install at a prompt is a parse error, not a no-op.
     if ($Postinstall) {
         Write-Host ""
-        Write-Host "Running $installPath install..."
+        Write-Host "Running & `"$installPath`" install ..."
         & $installPath install
         if ($LASTEXITCODE -ne 0) {
-            Fail "postinstall failed - $Binary is installed at $installPath, but registering it with Claude Code did not succeed. Run '$installPath install' yourself to retry."
+            Fail "postinstall failed - $Binary is installed at $installPath, but registering it with Claude Code did not succeed. Run it yourself with: & `"$installPath`" install"
         }
     } else {
         Write-Host ""
-        Write-Host "Next: run $installPath install to register $Binary with Claude Code."
+        Write-Host "Next: register it with Claude Code by running:"
+        Write-Host ""
+        Write-Host "  & `"$installPath`" install"
+        Write-Host ""
     }
 }
 finally {
