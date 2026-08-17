@@ -119,7 +119,7 @@ func selfPath() (string, error) {
 	if within, _ := filepath.Rel(os.TempDir(), self); within != "" && !filepath.IsAbs(within) &&
 		!hasParentTraversal(within) {
 		return "", fmt.Errorf("this binary is in a temporary directory (%s); "+
-			"move it somewhere permanent before registering it", self)
+			"move it somewhere permanent first", self)
 	}
 	return self, nil
 }

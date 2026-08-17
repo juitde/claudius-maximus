@@ -46,9 +46,7 @@ func cliSelfUpdate(svc *Service, args []string) int {
 			return fail(fmt.Errorf("determine the latest release: %w", err))
 		}
 	}
-	if !strings.HasPrefix(tag, "v") {
-		tag = "v" + tag
-	}
+	tag = normalizeTag(tag)
 
 	if !*force && strings.TrimPrefix(tag, "v") == strings.TrimPrefix(version, "v") {
 		fmt.Printf("Already on %s\n", tag)
@@ -87,6 +85,15 @@ func cliSelfUpdate(svc *Service, args []string) int {
 	fmt.Println("If claudius-maximus mcp is currently running as a registered " +
 		"server, restart it (or your Claude Code session) to use the new version.")
 	return exitOK
+}
+
+// normalizeTag strips any leading "v" or "V" and re-adds a lowercase "v" -
+// --version V1.2.3 (capital V) must resolve to the same tag as v1.2.3, not
+// silently become the non-existent tag "vV1.2.3".
+func normalizeTag(tag string) string {
+	tag = strings.TrimPrefix(tag, "v")
+	tag = strings.TrimPrefix(tag, "V")
+	return "v" + tag
 }
 
 // binaryName is the name of the binary entry inside a release archive -
@@ -156,6 +163,12 @@ func resolveLatestTag(client *http.Client, baseURL, repo string) (string, error)
 	return resolved.Path[idx+len(marker):], nil
 }
 
+// maxDownloadSize bounds how much of a response httpGetOK ever buffers into
+// memory - generously larger than any real release asset (the largest today
+// is a few MB), but small enough to keep a misconfigured redirect or a
+// compromised server from dictating this process's memory usage.
+const maxDownloadSize = 200 * 1024 * 1024
+
 // httpGetOK is a plain GET that treats any non-200 status as an error - a
 // 404 (a bad --version, or an excluded platform like windows/arm64) must
 // produce a clear message here, not a checksum failure against a
@@ -170,9 +183,12 @@ func httpGetOK(client *http.Client, url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch %s: unexpected status %s", url, resp.Status)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response from %s: %w", url, err)
+	}
+	if len(data) > maxDownloadSize {
+		return nil, fmt.Errorf("fetch %s: response exceeds %d bytes", url, maxDownloadSize)
 	}
 	return data, nil
 }
