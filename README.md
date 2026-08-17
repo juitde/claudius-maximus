@@ -67,6 +67,20 @@ by hand.
 github.com/juitde/claudius-maximus@latest` works today without either
 script, and resolves against Go's own module checksum database.
 
+### Updating
+
+```bash
+claudius-maximus self-update                # latest release
+claudius-maximus self-update --version v0.2.0
+```
+
+Downloads the requested (default: latest) release, verifies it against that
+release's `checksums.txt`, and replaces this binary in place at its own path
+— no need to re-run `install`, since the MCP registration already points at
+that path rather than at a version. An already-running `claudius-maximus mcp`
+process keeps the old code until its next relaunch, since only the file on
+disk changes. `--force` re-applies the target version even if already on it.
+
 ## Build
 
 ```bash

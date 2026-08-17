@@ -46,6 +46,8 @@ func runCLI(svc *Service, args []string) int {
 		return cliInstall(svc, args[1:])
 	case "uninstall":
 		return cliUninstall(svc, args[1:])
+	case "self-update":
+		return cliSelfUpdate(svc, args[1:])
 	case "config":
 		return cliConfig(svc, args[1:])
 	case "doctor":
@@ -71,6 +73,7 @@ Usage:
   %[3]s install              Register as an MCP server with Claude Code
   %[3]s uninstall            Remove that registration
   %[3]s mcp                  Run the MCP server over stdio (what install registers)
+  %[3]s self-update          Replace this binary with the latest (or --version) release
 
   %[3]s doctor [--json]      Report on the setup and preview what a rescan would do
   %[3]s config <subcommand>  Inspect or edit the configuration ('config' for details)
