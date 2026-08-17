@@ -19,6 +19,48 @@ sessions for any project on the machine.
 > [CONTRIBUTING.md](./CONTRIBUTING.md) has the build/test commands and commit
 > style for anyone sending a PR.
 
+## Install
+
+**macOS/Linux:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/8a7641a5f6eb78819e691fe968429eda73db0cf4/install.sh | sh
+```
+
+Pinned to a specific commit rather than `main` or a release tag on purpose:
+a bug in the installer can be fixed without waiting on a new tool release,
+and nothing here takes effect for anyone until this pinned reference is
+deliberately updated, so a change landing on `main` and a change actually
+reaching users are two separate, both-reviewable steps. See RELEASING.md.
+
+Pass flags after `sh -s --` to override the version or install directory
+(defaults: latest release; `/usr/local/bin` on macOS, `~/.local/bin` on
+Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/8a7641a5f6eb78819e691fe968429eda73db0cf4/install.sh | sh -s -- --version v0.1.0 --dir ~/bin
+```
+
+Not supported inside WSL; the script refuses on purpose rather than
+installing an untested combination. Use the Windows installer below from a
+native PowerShell prompt instead.
+
+**Windows** (native PowerShell, not WSL or PowerShell Core on another OS):
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/juitde/claudius-maximus/8a7641a5f6eb78819e691fe968429eda73db0cf4/install.ps1 -OutFile $env:TEMP\install.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\install.ps1"
+```
+
+Downloads to disk before running rather than `irm | iex`, so Defender gets
+a chance to see the file before it executes, and only bypasses the
+execution policy for this one invocation rather than changing it
+system-wide. Same flags, PowerShell-named: `-Version`, `-Dir` (default:
+`%LOCALAPPDATA%\Programs\claudius-maximus`).
+
+**With Go installed**, on any platform: `go install
+github.com/juitde/claudius-maximus@latest` works today without either
+script, and resolves against Go's own module checksum database.
+
 ## Build
 
 ```bash
