@@ -27,8 +27,9 @@ $Repo = "juitde/claudius-maximus"
 $Binary = "claudius-maximus.exe"
 
 function Fail($Message) {
+    # $ErrorActionPreference = "Stop" (set above) makes Write-Error terminate
+    # the script on its own; no separate exit is needed or reachable.
     Write-Error "install.ps1: $Message"
-    exit 1
 }
 
 # --- Refuse off Windows, on purpose -----------------------------------------
@@ -45,7 +46,10 @@ if (-not $onWindows) {
 }
 
 # --- Architecture detection ---------------------------------------------------
-$archRaw = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
+# OSArchitecture, not ProcessArchitecture: the latter reports the bitness of
+# the running PowerShell host, not the machine - a 32-bit powershell.exe on a
+# 64-bit Windows install would otherwise be misreported as unsupported.
+$archRaw = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 switch ($archRaw) {
     "X64" { $goarch = "amd64" }
     default { Fail "unsupported architecture: $archRaw (only amd64 Windows builds are published)" }
@@ -54,6 +58,13 @@ switch ($archRaw) {
 # --- Default install directory -------------------------------------------------
 if (-not $Dir) {
     $Dir = Join-Path $env:LOCALAPPDATA "Programs\claudius-maximus"
+}
+
+# A leading ~ is a shell/PowerShell-provider convention, not something plain
+# [System.IO.Path] methods understand - expand it by hand the same way
+# Resolve-Path would, before treating the result as a plain filesystem path.
+if ($Dir -eq '~' -or $Dir.StartsWith('~/') -or $Dir.StartsWith('~\')) {
+    $Dir = Join-Path $HOME $Dir.Substring(1).TrimStart('/', '\')
 }
 
 # A relative -Dir would otherwise be created relative to wherever this script
@@ -66,19 +77,22 @@ if (-not [System.IO.Path]::IsPathRooted($Dir)) {
 # --- Resolve the version --------------------------------------------------------
 # Follows the releases/latest redirect rather than calling the GitHub API
 # directly, same as install.sh - and for the same reason: the unauthenticated
-# API's low per-IP rate limit. Consistent behavior between the two scripts
-# matters more here than using Invoke-RestMethod's native JSON parsing.
+# API's low per-IP rate limit. Reads the Location header off a raw HttpClient
+# response (AllowAutoRedirect disabled) rather than Invoke-WebRequest's own
+# response object, whose shape differs between PowerShell 5.1 and 7 and would
+# otherwise couple this script to that internal, version-dependent detail.
 if (-not $Version) {
-    $resp = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -UseBasicParsing
-    # PowerShell 7's BaseResponse (System.Net.Http.HttpResponseMessage) leaves
-    # .ResponseUri empty; the resolved URL is at .RequestMessage.RequestUri
-    # instead. Windows PowerShell 5.1's BaseResponse (System.Net.HttpWebResponse)
-    # has .ResponseUri populated instead, so both are tried.
-    $finalUri = $resp.BaseResponse.ResponseUri
-    if (-not $finalUri) {
-        $finalUri = $resp.BaseResponse.RequestMessage.RequestUri
+    Add-Type -AssemblyName System.Net.Http
+    $handler = New-Object System.Net.Http.HttpClientHandler
+    $handler.AllowAutoRedirect = $false
+    $client = New-Object System.Net.Http.HttpClient($handler)
+    try {
+        $response = $client.GetAsync("https://github.com/$Repo/releases/latest").GetAwaiter().GetResult()
+    } finally {
+        $client.Dispose()
     }
-    if ($finalUri -and ($finalUri.ToString() -match '/tag/([^/]+)$')) {
+    $location = $response.Headers.Location
+    if ($location -and ($location.ToString() -match '/tag/([^/]+)$')) {
         $Version = $Matches[1]
     } else {
         Fail "could not determine the latest release version"
@@ -91,21 +105,21 @@ $baseUrl = "https://github.com/$Repo/releases/download/$Version"
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Path $workDir | Out-Null
 
+function Get-ReleaseFile($Url, $OutFile, $FailContext) {
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
+    } catch {
+        Fail "failed to download $FailContext"
+    }
+}
+
 try {
     Write-Host "Downloading $archive ($Version)..."
     $archivePath = Join-Path $workDir $archive
-    try {
-        Invoke-WebRequest -Uri "$baseUrl/$archive" -OutFile $archivePath -UseBasicParsing
-    } catch {
-        Fail "failed to download $archive - does $Version exist for windows/$goarch?"
-    }
+    Get-ReleaseFile "$baseUrl/$archive" $archivePath "$archive - does $Version exist for windows/$goarch?"
 
     $checksumsPath = Join-Path $workDir "checksums.txt"
-    try {
-        Invoke-WebRequest -Uri "$baseUrl/checksums.txt" -OutFile $checksumsPath -UseBasicParsing
-    } catch {
-        Fail "failed to download checksums.txt"
-    }
+    Get-ReleaseFile "$baseUrl/checksums.txt" $checksumsPath "checksums.txt"
 
     Write-Host "Verifying checksum..."
     $pattern = "\s" + [regex]::Escape($archive) + '$'
