@@ -40,6 +40,8 @@ if [ -n "${WSL_DISTRO_NAME:-}" ]; then
   err "this looks like WSL (\$WSL_DISTRO_NAME is set). Use install.ps1 from a native Windows PowerShell prompt instead."
 fi
 
+command -v curl >/dev/null 2>&1 || err "curl is required but was not found"
+
 # --- Argument parsing -------------------------------------------------------
 VERSION=""
 DIR=""
@@ -96,6 +98,14 @@ if [ -z "$DIR" ]; then
   esac
 fi
 
+# A relative --dir would otherwise be created relative to wherever this
+# script happens to be invoked from, and neither the final "installed to"
+# message nor the PATH check below would mean much against a relative path.
+case "$DIR" in
+  /*) ;;
+  *) DIR="$(pwd)/$DIR" ;;
+esac
+
 # --- Resolve the version ------------------------------------------------------
 # Following the releases/latest redirect, rather than parsing the GitHub API's
 # JSON, avoids both a jq dependency this script doesn't otherwise need and
@@ -118,7 +128,9 @@ curl -fsSL -o "$workdir/checksums.txt" "$base_url/checksums.txt" \
   || err "failed to download checksums.txt"
 
 echo "Verifying checksum..."
-expected="$(grep " $archive\$" "$workdir/checksums.txt" | awk '{print $1}')"
+# -F: $archive is matched as a literal string, not a regex - it contains
+# dots that would otherwise match any character rather than themselves.
+expected="$(grep -F " $archive" "$workdir/checksums.txt" | awk '{print $1}')"
 [ -n "$expected" ] || err "no checksum entry found for $archive in checksums.txt"
 
 if command -v sha256sum >/dev/null 2>&1; then
