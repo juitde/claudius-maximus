@@ -92,4 +92,11 @@ jobs:
         run: |
           $dir = Join-Path $env:RUNNER_TEMP "install-test"
           ./install.ps1 -Dir $dir
+          # pwsh does not turn a native command's non-zero exit code into its
+          # own exit code by default, so a crashing/misbuilt binary here would
+          # otherwise report as a passing step - check $LASTEXITCODE by hand.
           & "$dir\claudius-maximus.exe" version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "claudius-maximus.exe version exited $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
