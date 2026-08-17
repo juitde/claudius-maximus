@@ -15,11 +15,13 @@ BINARY="claudius-maximus"
 
 usage() {
   cat <<EOF
-Usage: install.sh [--version vX.Y.Z] [--dir DIRECTORY]
+Usage: install.sh [--version vX.Y.Z] [--dir DIRECTORY] [--postinstall]
 
-  --version   Version to install (default: the latest release)
-  --dir       Directory to install into (default: platform-specific)
-  -h, --help  Show this help
+  --version      Version to install (default: the latest release)
+  --dir          Directory to install into (default: platform-specific)
+  --postinstall  Also run "<binary> install" to register it with Claude Code
+                 (default: print a hint instead - see issue #14)
+  -h, --help     Show this help
 EOF
 }
 
@@ -49,6 +51,7 @@ command -v curl >/dev/null 2>&1 || err "curl is required but was not found"
 # --- Argument parsing -------------------------------------------------------
 VERSION=""
 DIR=""
+POSTINSTALL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
@@ -67,6 +70,10 @@ while [ $# -gt 0 ]; do
       ;;
     --dir=*)
       DIR="${1#--dir=}"
+      shift
+      ;;
+    --postinstall)
+      POSTINSTALL=1
       shift
       ;;
     -h | --help)
@@ -191,3 +198,18 @@ case ":$PATH:" in
     echo ""
     ;;
 esac
+
+# --- Postinstall registration -------------------------------------------------
+# Placing the binary and registering it with Claude Code are two different
+# actions with two different blast radii (the second mutates the caller's
+# Claude Code configuration and requires `claude` on PATH) - opt-in via
+# --postinstall, not automatic. See issue #14.
+if [ "$POSTINSTALL" = 1 ]; then
+  echo ""
+  echo "Running \"$install_path\" install..."
+  "$install_path" install \
+    || err "postinstall failed - $BINARY is installed at $install_path, but registering it with Claude Code did not succeed. Run \"$install_path install\" yourself to retry."
+else
+  echo ""
+  echo "Next: run \"$install_path\" install to register $BINARY with Claude Code."
+fi
