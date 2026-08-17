@@ -56,14 +56,31 @@ if (-not $Dir) {
     $Dir = Join-Path $env:LOCALAPPDATA "Programs\claudius-maximus"
 }
 
+# A relative -Dir would otherwise be created relative to wherever this script
+# happens to be invoked from, and neither the final "installed to" message
+# nor the PATH check below would mean much against a relative path.
+if (-not [System.IO.Path]::IsPathRooted($Dir)) {
+    $Dir = [System.IO.Path]::GetFullPath($Dir)
+}
+
 # --- Resolve the version --------------------------------------------------------
-# Invoke-RestMethod parses JSON natively, so - unlike install.sh, which
-# avoids a jq dependency by following the releases/latest redirect instead -
-# there is no reason here not to just ask the GitHub API directly.
+# Follows the releases/latest redirect rather than calling the GitHub API
+# directly, same as install.sh - and for the same reason: the unauthenticated
+# API's low per-IP rate limit. Consistent behavior between the two scripts
+# matters more here than using Invoke-RestMethod's native JSON parsing.
 if (-not $Version) {
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -UseBasicParsing
-    $Version = $release.tag_name
-    if (-not $Version) {
+    $resp = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -UseBasicParsing
+    # PowerShell 7's BaseResponse (System.Net.Http.HttpResponseMessage) leaves
+    # .ResponseUri empty; the resolved URL is at .RequestMessage.RequestUri
+    # instead. Windows PowerShell 5.1's BaseResponse (System.Net.HttpWebResponse)
+    # has .ResponseUri populated instead, so both are tried.
+    $finalUri = $resp.BaseResponse.ResponseUri
+    if (-not $finalUri) {
+        $finalUri = $resp.BaseResponse.RequestMessage.RequestUri
+    }
+    if ($finalUri -and ($finalUri.ToString() -match '/tag/([^/]+)$')) {
+        $Version = $Matches[1]
+    } else {
         Fail "could not determine the latest release version"
     }
 }
@@ -112,8 +129,11 @@ try {
     Write-Host "Installed $Binary $Version to $installPath"
 
     # --- PATH check -----------------------------------------------------------
-    $pathDirs = $env:Path -split ';'
-    if ($pathDirs -notcontains $Dir) {
+    # Trim trailing backslashes on both sides - Windows treats "C:\tools" and
+    # "C:\tools\" as the same directory, but an exact string comparison would not.
+    $normalizedDir = $Dir.TrimEnd('\')
+    $pathDirs = $env:Path -split ';' | ForEach-Object { $_.TrimEnd('\') }
+    if ($pathDirs -notcontains $normalizedDir) {
         Write-Host ""
         Write-Host "Warning: $Dir is not in your PATH."
         Write-Host "Add it for your user account with:"
