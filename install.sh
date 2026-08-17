@@ -33,11 +33,15 @@ err() {
 # which filesystem, whether the Windows-native tool was actually wanted) this
 # project has not tested against. install.ps1 covers native Windows instead;
 # see the design discussion linked from issue #14.
+is_wsl=0
 if [ -r /proc/version ] && grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
-  err "this looks like WSL. Use install.ps1 from a native Windows PowerShell prompt instead - installing the Linux binary inside WSL is not a supported combination."
+  is_wsl=1
 fi
 if [ -n "${WSL_DISTRO_NAME:-}" ]; then
-  err "this looks like WSL (\$WSL_DISTRO_NAME is set). Use install.ps1 from a native Windows PowerShell prompt instead."
+  is_wsl=1
+fi
+if [ "$is_wsl" = 1 ]; then
+  err "this looks like WSL. Use install.ps1 from a native Windows PowerShell prompt instead - installing the Linux binary inside WSL is not a supported combination."
 fi
 
 command -v curl >/dev/null 2>&1 || err "curl is required but was not found"
@@ -98,6 +102,15 @@ if [ -z "$DIR" ]; then
   esac
 fi
 
+# A leading ~ is a shell convention, not something the shell itself expands
+# once it has passed through as a literal argument (e.g. --dir=~/bin, or any
+# quoted form) - expand it by hand the same way an interactive shell would.
+# shellcheck disable=SC2088 # intentional: matching a literal ~, not expanding one
+case "$DIR" in
+  "~") DIR="$HOME" ;;
+  "~/"*) DIR="$HOME/${DIR#\~/}" ;;
+esac
+
 # A relative --dir would otherwise be created relative to wherever this
 # script happens to be invoked from, and neither the final "installed to"
 # message nor the PATH check below would mean much against a relative path.
@@ -106,12 +119,23 @@ case "$DIR" in
   *) DIR="$(pwd)/$DIR" ;;
 esac
 
+# Strip a trailing slash so the PATH check below (which compares $DIR against
+# colon-separated $PATH entries verbatim) isn't defeated by e.g. --dir ~/bin/
+# already being on PATH as ~/bin.
+DIR="${DIR%/}"
+[ -n "$DIR" ] || DIR="/"
+
 # --- Resolve the version ------------------------------------------------------
 # Following the releases/latest redirect, rather than parsing the GitHub API's
 # JSON, avoids both a jq dependency this script doesn't otherwise need and
 # the unauthenticated API's low per-IP rate limit.
 if [ -z "$VERSION" ]; then
-  VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed -E 's#.*/tag/##')"
+  # Captured directly (not piped into sed) so curl's own exit status - not
+  # sed's, which would always succeed even on curl failure without pipefail,
+  # a `set -o` dash lacks - is what triggers the error below.
+  url_effective="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" \
+    || err "failed to reach GitHub to determine the latest release version"
+  VERSION="$(printf '%s' "$url_effective" | sed -E 's#.*/tag/##')"
   [ -n "$VERSION" ] || err "could not determine the latest release version"
 fi
 
@@ -128,9 +152,10 @@ curl -fsSL -o "$workdir/checksums.txt" "$base_url/checksums.txt" \
   || err "failed to download checksums.txt"
 
 echo "Verifying checksum..."
-# -F: $archive is matched as a literal string, not a regex - it contains
-# dots that would otherwise match any character rather than themselves.
-expected="$(grep -F " $archive" "$workdir/checksums.txt" | awk '{print $1}')"
+# awk compares the filename field for an exact match, rather than grep with a
+# pattern - regex or literal - that a filename sharing a prefix with $archive
+# (e.g. a future .sig/SBOM entry) could also match.
+expected="$(awk -v f="$archive" '$2 == f { print $1 }' "$workdir/checksums.txt")"
 [ -n "$expected" ] || err "no checksum entry found for $archive in checksums.txt"
 
 if command -v sha256sum >/dev/null 2>&1; then
