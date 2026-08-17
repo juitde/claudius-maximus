@@ -14,11 +14,15 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Version v0.1.0 -Dir C:\tools
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File install.ps1 -Postinstall
 #>
 
 param(
     [string]$Version,
-    [string]$Dir
+    [string]$Dir,
+    [switch]$Postinstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -156,6 +160,23 @@ try {
         Write-Host ""
         Write-Host "Then restart your terminal."
         Write-Host ""
+    }
+
+    # --- Postinstall registration ----------------------------------------------
+    # Placing the binary and registering it with Claude Code are two different
+    # actions with two different blast radii (the second mutates the caller's
+    # Claude Code configuration and requires `claude` on PATH) - opt-in via
+    # -Postinstall, not automatic. See issue #14.
+    if ($Postinstall) {
+        Write-Host ""
+        Write-Host "Running $installPath install..."
+        & $installPath install
+        if ($LASTEXITCODE -ne 0) {
+            Fail "postinstall failed - $Binary is installed at $installPath, but registering it with Claude Code did not succeed. Run '$installPath install' yourself to retry."
+        }
+    } else {
+        Write-Host ""
+        Write-Host "Next: run $installPath install to register $Binary with Claude Code."
     }
 }
 finally {
