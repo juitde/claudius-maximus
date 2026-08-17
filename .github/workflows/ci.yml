@@ -65,3 +65,31 @@ jobs:
             echo "==> $target"
             GOOS="${target%/*}" GOARCH="${target#*/}" go build -o /dev/null .
           done
+
+  install-script:
+    # Runs the checked-out install.sh/install.ps1 against the real latest
+    # GitHub release on all three platforms - this is the actual, live
+    # install experience documented in the README, not a simulation of it.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run install.sh and verify the binary works
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          dir="$RUNNER_TEMP/install-test"
+          ./install.sh --dir "$dir"
+          "$dir/claudius-maximus" version
+
+      - name: Run install.ps1 and verify the binary works
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "install-test"
+          ./install.ps1 -Dir $dir
+          & "$dir\claudius-maximus.exe" version
