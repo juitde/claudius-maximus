@@ -24,7 +24,7 @@ sessions for any project on the machine.
 **macOS/Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/2baff0956fd9553c213a7e319a35a00d0df82c32/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/c6851a91853861f9a0f1aef27525d508b2e878e8/install.sh | sh
 ```
 
 Pinned to a specific commit rather than `main` or a release tag on purpose:
@@ -38,7 +38,7 @@ Pass flags after `sh -s --` to override the version or install directory
 Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/2baff0956fd9553c213a7e319a35a00d0df82c32/install.sh | sh -s -- --version v0.1.0 --dir ~/bin
+curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/c6851a91853861f9a0f1aef27525d508b2e878e8/install.sh | sh -s -- --version v0.1.0 --dir ~/bin
 ```
 
 Not supported inside WSL; the script refuses on purpose rather than
@@ -48,7 +48,7 @@ native PowerShell prompt instead.
 **Windows** (native PowerShell, not WSL or PowerShell Core on another OS):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/juitde/claudius-maximus/2baff0956fd9553c213a7e319a35a00d0df82c32/install.ps1 -OutFile $env:TEMP\install.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\install.ps1"
+powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/juitde/claudius-maximus/c6851a91853861f9a0f1aef27525d508b2e878e8/install.ps1 -OutFile $env:TEMP\install.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\install.ps1"
 ```
 
 Downloads to disk before running rather than `irm | iex`, so Defender gets
@@ -56,6 +56,12 @@ a chance to see the file before it executes, and only bypasses the
 execution policy for this one invocation rather than changing it
 system-wide. Same flags, PowerShell-named: `-Version`, `-Dir` (default:
 `%LOCALAPPDATA%\Programs\claudius-maximus`).
+
+Neither script registers the tool with Claude Code on its own; both print a
+`Next: run "<path> install"` hint afterward instead, since that step mutates
+your Claude Code configuration and needs `claude` already on `PATH`. Pass
+`--postinstall` (`-Postinstall` on Windows) to run it immediately instead of
+by hand.
 
 **With Go installed**, on any platform: `go install
 github.com/juitde/claudius-maximus@latest` works today without either
