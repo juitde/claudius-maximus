@@ -24,7 +24,7 @@ sessions for any project on the machine.
 **macOS/Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/8a7641a5f6eb78819e691fe968429eda73db0cf4/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/61d0eae46b5967d8f8b147afbeb8323080c7866f/install.sh | sh
 ```
 
 Pinned to a specific commit rather than `main` or a release tag on purpose:
@@ -38,7 +38,7 @@ Pass flags after `sh -s --` to override the version or install directory
 Linux):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/8a7641a5f6eb78819e691fe968429eda73db0cf4/install.sh | sh -s -- --version v0.1.0 --dir ~/bin
+curl -fsSL https://raw.githubusercontent.com/juitde/claudius-maximus/61d0eae46b5967d8f8b147afbeb8323080c7866f/install.sh | sh -s -- --version v0.1.0 --dir ~/bin
 ```
 
 Not supported inside WSL; the script refuses on purpose rather than
@@ -48,7 +48,7 @@ native PowerShell prompt instead.
 **Windows** (native PowerShell, not WSL or PowerShell Core on another OS):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/juitde/claudius-maximus/8a7641a5f6eb78819e691fe968429eda73db0cf4/install.ps1 -OutFile $env:TEMP\install.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\install.ps1"
+powershell -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/juitde/claudius-maximus/61d0eae46b5967d8f8b147afbeb8323080c7866f/install.ps1 -OutFile $env:TEMP\install.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\install.ps1"
 ```
 
 Downloads to disk before running rather than `irm | iex`, so Defender gets
